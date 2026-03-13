@@ -44,7 +44,7 @@ func (ra *RestApi) CreateAlert(w http.ResponseWriter, r *http.Request) {
 	if n.Status != nil {
 		params.Status = *n.Status
 	} else {
-		params.Status = rest.AlertStatusOpen
+		params.Status = rest.Open
 	}
 
 	if n.Service != nil {

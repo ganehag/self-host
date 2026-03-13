@@ -18,8 +18,8 @@ type BasicAuthItem struct {
 }
 
 // Allow access only to the credentials declared in []BasicAuthItem
-func BasicAuth(auths []BasicAuthItem) func(http.HandlerFunc) http.HandlerFunc {
-	return func(next http.HandlerFunc) http.HandlerFunc {
+func BasicAuth(auths []BasicAuthItem) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			u, p, ok := r.BasicAuth()
 			if ok {

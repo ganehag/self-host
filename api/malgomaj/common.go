@@ -11,13 +11,6 @@ import (
 type NewTask_Http_Headers map[string]string
 type NewTask_Libraries map[string][]byte
 
-type NewTaskLanguage string
-
-// Defines values for NewTaskLanguage.
-const (
-	NewTaskLanguageTengo NewTaskLanguage = "tengo"
-)
-
 type NewTaskHttp struct {
 	Body    []byte               `json:"body"`
 	Headers NewTask_Http_Headers `json:"headers"`

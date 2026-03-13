@@ -114,12 +114,12 @@ func newVisitorController(r, b int, cleanUp time.Duration) *visitorController {
 }
 
 // Rate control middleware
-func RateControl(reqPerHour int, maxburst int, cleanup time.Duration) func(http.HandlerFunc) http.HandlerFunc {
+func RateControl(reqPerHour int, maxburst int, cleanup time.Duration) func(http.Handler) http.Handler {
 	// FIXME: From config, somehow.
 	vc := newVisitorController(reqPerHour, maxburst, cleanup)
 	vc.Start()
 
-	return func(next http.HandlerFunc) http.HandlerFunc {
+	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			domain, apiKey, ok := r.BasicAuth()
 			if ok == false {

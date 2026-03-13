@@ -27,7 +27,7 @@ func sendError(w http.ResponseWriter, code int, message string) {
 }
 
 // Type declaration of MiddlewareFunc
-type MiddlewareFunc func(http.HandlerFunc) http.HandlerFunc
+type MiddlewareFunc func(http.Handler) http.Handler
 
 // Type declaration of Options
 type Options struct {

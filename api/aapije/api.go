@@ -2,9 +2,9 @@
 // Use of this source code is governed by the GPLv3
 // license that can be found in the LICENSE file.
 
-//go:generate go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen --config=rest/types.cfg.yaml rest/openapiv3.yaml
-//go:generate go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen --config=rest/server.cfg.yaml rest/openapiv3.yaml
-//go:generate go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen --config=rest/client.cfg.yaml rest/openapiv3.yaml
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.6.0 --config=rest/types.cfg.yaml rest/openapiv3.yaml
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.6.0 --config=rest/server.cfg.yaml rest/openapiv3.yaml
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.6.0 --config=rest/client.cfg.yaml rest/openapiv3.yaml
 
 package aapije
 

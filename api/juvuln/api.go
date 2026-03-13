@@ -2,8 +2,8 @@
 // Use of this source code is governed by the GPLv3
 // license that can be found in the LICENSE file.
 
-//go:generate go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen --config=types.cfg.yaml openapiv3.yaml
-//go:generate go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen --config=server.cfg.yaml openapiv3.yaml
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.6.0 --config=types.cfg.yaml openapiv3.yaml
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.6.0 --config=server.cfg.yaml openapiv3.yaml
 
 package juvuln
 

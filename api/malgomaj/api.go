@@ -2,8 +2,8 @@
 // Use of this source code is governed by the GPLv3
 // license that can be found in the LICENSE file.
 
-//go:generate go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen --config=types.cfg.yaml openapiv3.yaml
-//go:generate go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen --config=server.cfg.yaml openapiv3.yaml
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.6.0 --config=types.cfg.yaml openapiv3.yaml
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.6.0 --config=server.cfg.yaml openapiv3.yaml
 
 package malgomaj
 
@@ -83,8 +83,11 @@ func (ra *RestApi) CreateTask(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Expires", cacheItem.expires.In(time.FixedZone("GMT", 0)).Format(time.RFC1123))
 
 	if t.Http != nil {
-		h := (NewTaskHttp)(*t.Http)
-		ctx = context.WithValue(ctx, "http", &h)
+		h := &NewTaskHttp{
+			Body:    t.Http.Body,
+			Headers: t.Http.Headers,
+		}
+		ctx = context.WithValue(ctx, "http", h)
 
 		// Set it to something...
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
