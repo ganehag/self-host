@@ -704,139 +704,6 @@ func (q *Queries) GetSignedProgramCodeAtHead(ctx context.Context, programUuid uu
 	return i, err
 }
 
-const setProgramDeadlineByUUID = `-- name: SetProgramDeadlineByUUID :execrows
-UPDATE programs
-SET deadline = $1
-WHERE programs.uuid = $2
-`
-
-type SetProgramDeadlineByUUIDParams struct {
-	Deadline int32
-	Uuid     uuid.UUID
-}
-
-func (q *Queries) SetProgramDeadlineByUUID(ctx context.Context, arg SetProgramDeadlineByUUIDParams) (int64, error) {
-	result, err := q.exec(ctx, q.setProgramDeadlineByUUIDStmt, setProgramDeadlineByUUID, arg.Deadline, arg.Uuid)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const setProgramLanguageByUUID = `-- name: SetProgramLanguageByUUID :execrows
-UPDATE programs
-SET language = $1
-WHERE programs.uuid = $2
-`
-
-type SetProgramLanguageByUUIDParams struct {
-	Language string
-	Uuid     uuid.UUID
-}
-
-func (q *Queries) SetProgramLanguageByUUID(ctx context.Context, arg SetProgramLanguageByUUIDParams) (int64, error) {
-	result, err := q.exec(ctx, q.setProgramLanguageByUUIDStmt, setProgramLanguageByUUID, arg.Language, arg.Uuid)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const setProgramNameByUUID = `-- name: SetProgramNameByUUID :execrows
-UPDATE programs
-SET name = $1
-WHERE programs.uuid = $2
-`
-
-type SetProgramNameByUUIDParams struct {
-	Name string
-	Uuid uuid.UUID
-}
-
-func (q *Queries) SetProgramNameByUUID(ctx context.Context, arg SetProgramNameByUUIDParams) (int64, error) {
-	result, err := q.exec(ctx, q.setProgramNameByUUIDStmt, setProgramNameByUUID, arg.Name, arg.Uuid)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const setProgramScheduleByUUID = `-- name: SetProgramScheduleByUUID :execrows
-UPDATE programs
-SET schedule = $1
-WHERE programs.uuid = $2
-`
-
-type SetProgramScheduleByUUIDParams struct {
-	Schedule string
-	Uuid     uuid.UUID
-}
-
-func (q *Queries) SetProgramScheduleByUUID(ctx context.Context, arg SetProgramScheduleByUUIDParams) (int64, error) {
-	result, err := q.exec(ctx, q.setProgramScheduleByUUIDStmt, setProgramScheduleByUUID, arg.Schedule, arg.Uuid)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const setProgramStateByUUID = `-- name: SetProgramStateByUUID :execrows
-UPDATE programs
-SET state = $1
-WHERE programs.uuid = $2
-`
-
-type SetProgramStateByUUIDParams struct {
-	State string
-	Uuid  uuid.UUID
-}
-
-func (q *Queries) SetProgramStateByUUID(ctx context.Context, arg SetProgramStateByUUIDParams) (int64, error) {
-	result, err := q.exec(ctx, q.setProgramStateByUUIDStmt, setProgramStateByUUID, arg.State, arg.Uuid)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const setProgramTags = `-- name: SetProgramTags :execrows
-UPDATE programs
-SET tags = $1
-WHERE programs.uuid = $2
-`
-
-type SetProgramTagsParams struct {
-	Tags []string
-	Uuid uuid.UUID
-}
-
-func (q *Queries) SetProgramTags(ctx context.Context, arg SetProgramTagsParams) (int64, error) {
-	result, err := q.exec(ctx, q.setProgramTagsStmt, setProgramTags, pq.Array(arg.Tags), arg.Uuid)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const setProgramTypeByUUID = `-- name: SetProgramTypeByUUID :execrows
-UPDATE programs
-SET type = $1
-WHERE programs.uuid = $2
-`
-
-type SetProgramTypeByUUIDParams struct {
-	Type string
-	Uuid uuid.UUID
-}
-
-func (q *Queries) SetProgramTypeByUUID(ctx context.Context, arg SetProgramTypeByUUIDParams) (int64, error) {
-	result, err := q.exec(ctx, q.setProgramTypeByUUIDStmt, setProgramTypeByUUID, arg.Type, arg.Uuid)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const signProgramCodeRevision = `-- name: SignProgramCodeRevision :execrows
 UPDATE program_code_revisions
 SET signed_by = $1, signed = now()
@@ -852,6 +719,82 @@ type SignProgramCodeRevisionParams struct {
 
 func (q *Queries) SignProgramCodeRevision(ctx context.Context, arg SignProgramCodeRevisionParams) (int64, error) {
 	result, err := q.exec(ctx, q.signProgramCodeRevisionStmt, signProgramCodeRevision, arg.SignedBy, arg.ProgramUuid, arg.Revision)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateProgramByUUID = `-- name: UpdateProgramByUUID :execrows
+UPDATE programs
+SET
+	name = CASE
+		WHEN $1::boolean THEN $2
+		ELSE name
+	END,
+	type = CASE
+		WHEN $3::boolean THEN $4
+		ELSE type
+	END,
+	state = CASE
+		WHEN $5::boolean THEN $6
+		ELSE state
+	END,
+	schedule = CASE
+		WHEN $7::boolean THEN $8
+		ELSE schedule
+	END,
+	deadline = CASE
+		WHEN $9::boolean THEN $10
+		ELSE deadline
+	END,
+	language = CASE
+		WHEN $11::boolean THEN $12
+		ELSE language
+	END,
+	tags = CASE
+		WHEN $13::boolean THEN $14
+		ELSE tags
+	END
+WHERE programs.uuid = $15
+`
+
+type UpdateProgramByUUIDParams struct {
+	SetName     bool
+	Name        string
+	SetType     bool
+	Type        string
+	SetState    bool
+	State       string
+	SetSchedule bool
+	Schedule    string
+	SetDeadline bool
+	Deadline    int32
+	SetLanguage bool
+	Language    string
+	SetTags     bool
+	Tags        []string
+	Uuid        uuid.UUID
+}
+
+func (q *Queries) UpdateProgramByUUID(ctx context.Context, arg UpdateProgramByUUIDParams) (int64, error) {
+	result, err := q.exec(ctx, q.updateProgramByUUIDStmt, updateProgramByUUID,
+		arg.SetName,
+		arg.Name,
+		arg.SetType,
+		arg.Type,
+		arg.SetState,
+		arg.State,
+		arg.SetSchedule,
+		arg.Schedule,
+		arg.SetDeadline,
+		arg.Deadline,
+		arg.SetLanguage,
+		arg.Language,
+		arg.SetTags,
+		pq.Array(arg.Tags),
+		arg.Uuid,
+	)
 	if err != nil {
 		return 0, err
 	}

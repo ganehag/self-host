@@ -490,96 +490,64 @@ func (q *Queries) GetDatasetContentByUUID(ctx context.Context, argUuid uuid.UUID
 	return i, err
 }
 
-const setDatasetContentByUUID = `-- name: SetDatasetContentByUUID :execrows
+const updateDatasetByUUID = `-- name: UpdateDatasetByUUID :execrows
 UPDATE datasets
-SET content = $1::bytea,
-    checksum = sha256($1::bytea)
-WHERE datasets.uuid = $2
+SET
+	name = CASE
+		WHEN $1::boolean THEN $2
+		ELSE name
+	END,
+	format = CASE
+		WHEN $3::boolean THEN $4
+		ELSE format
+	END,
+	content = CASE
+		WHEN $5::boolean THEN $6::bytea
+		ELSE content
+	END,
+	checksum = CASE
+		WHEN $5::boolean THEN sha256($6::bytea)
+		ELSE checksum
+	END,
+	belongs_to = CASE
+		WHEN $7::boolean THEN $8
+		ELSE belongs_to
+	END,
+	tags = CASE
+		WHEN $9::boolean THEN $10
+		ELSE tags
+	END
+WHERE datasets.uuid = $11
 `
 
-type SetDatasetContentByUUIDParams struct {
-	Content []byte
-	Uuid    uuid.UUID
+type UpdateDatasetByUUIDParams struct {
+	SetName      bool
+	Name         string
+	SetFormat    bool
+	Format       string
+	SetContent   bool
+	Content      []byte
+	SetThingUuid bool
+	ThingUuid    uuid.NullUUID
+	SetTags      bool
+	Tags         []string
+	Uuid         uuid.UUID
 }
 
-func (q *Queries) SetDatasetContentByUUID(ctx context.Context, arg SetDatasetContentByUUIDParams) (int64, error) {
-	result, err := q.exec(ctx, q.setDatasetContentByUUIDStmt, setDatasetContentByUUID, arg.Content, arg.Uuid)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const setDatasetFormatByUUID = `-- name: SetDatasetFormatByUUID :execrows
-UPDATE datasets
-SET format = $1
-WHERE datasets.uuid = $2
-`
-
-type SetDatasetFormatByUUIDParams struct {
-	Format string
-	Uuid   uuid.UUID
-}
-
-func (q *Queries) SetDatasetFormatByUUID(ctx context.Context, arg SetDatasetFormatByUUIDParams) (int64, error) {
-	result, err := q.exec(ctx, q.setDatasetFormatByUUIDStmt, setDatasetFormatByUUID, arg.Format, arg.Uuid)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const setDatasetNameByUUID = `-- name: SetDatasetNameByUUID :execrows
-UPDATE datasets
-SET name = $1
-WHERE datasets.uuid = $2
-`
-
-type SetDatasetNameByUUIDParams struct {
-	Name string
-	Uuid uuid.UUID
-}
-
-func (q *Queries) SetDatasetNameByUUID(ctx context.Context, arg SetDatasetNameByUUIDParams) (int64, error) {
-	result, err := q.exec(ctx, q.setDatasetNameByUUIDStmt, setDatasetNameByUUID, arg.Name, arg.Uuid)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const setDatasetTags = `-- name: SetDatasetTags :execrows
-UPDATE datasets
-SET tags = $1
-WHERE datasets.uuid = $2
-`
-
-type SetDatasetTagsParams struct {
-	Tags []string
-	Uuid uuid.UUID
-}
-
-func (q *Queries) SetDatasetTags(ctx context.Context, arg SetDatasetTagsParams) (int64, error) {
-	result, err := q.exec(ctx, q.setDatasetTagsStmt, setDatasetTags, pq.Array(arg.Tags), arg.Uuid)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const setDatasetThingByUUID = `-- name: SetDatasetThingByUUID :execrows
-UPDATE datasets
-SET belongs_to = $1
-WHERE datasets.uuid = $2
-`
-
-type SetDatasetThingByUUIDParams struct {
-	ThingUuid uuid.NullUUID
-	Uuid      uuid.UUID
-}
-
-func (q *Queries) SetDatasetThingByUUID(ctx context.Context, arg SetDatasetThingByUUIDParams) (int64, error) {
-	result, err := q.exec(ctx, q.setDatasetThingByUUIDStmt, setDatasetThingByUUID, arg.ThingUuid, arg.Uuid)
+func (q *Queries) UpdateDatasetByUUID(ctx context.Context, arg UpdateDatasetByUUIDParams) (int64, error) {
+	result, err := q.exec(ctx, q.updateDatasetByUUIDStmt, updateDatasetByUUID,
+		arg.SetName,
+		arg.Name,
+		arg.SetFormat,
+		arg.Format,
+		arg.SetContent,
+		arg.Content,
+		arg.SetThingUuid,
+		arg.ThingUuid,
+		arg.SetTags,
+		pq.Array(arg.Tags),
+		arg.Uuid,
+	)
 	if err != nil {
 		return 0, err
 	}

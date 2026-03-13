@@ -196,12 +196,9 @@ func (ra *RestApi) UpdateDatasetByUuid(w http.ResponseWriter, r *http.Request, i
 		params.Format = &s
 	}
 
-	count, err := svc.UpdateDatasetByUuid(r.Context(), datasetUUID, params)
+	_, err = svc.UpdateDatasetByUuid(r.Context(), datasetUUID, params)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	} else if count == 0 {
-		ie.SendHTTPError(w, ie.ErrorNotFound)
 		return
 	}
 

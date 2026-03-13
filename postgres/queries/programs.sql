@@ -248,39 +248,37 @@ AND signed IS NOT NULL
 ORDER BY revision DESC
 LIMIT 1;
 
--- name: SetProgramNameByUUID :execrows
+-- name: UpdateProgramByUUID :execrows
 UPDATE programs
-SET name = sqlc.arg(name)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramTypeByUUID :execrows
-UPDATE programs
-SET type = sqlc.arg(type)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramStateByUUID :execrows
-UPDATE programs
-SET state = sqlc.arg(state)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramScheduleByUUID :execrows
-UPDATE programs
-SET schedule = sqlc.arg(schedule)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramDeadlineByUUID :execrows
-UPDATE programs
-SET deadline = sqlc.arg(deadline)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramLanguageByUUID :execrows
-UPDATE programs
-SET language = sqlc.arg(language)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramTags :execrows
-UPDATE programs
-SET tags = sqlc.arg(tags)
+SET
+	name = CASE
+		WHEN sqlc.arg(set_name)::boolean THEN sqlc.arg(name)
+		ELSE name
+	END,
+	type = CASE
+		WHEN sqlc.arg(set_type)::boolean THEN sqlc.arg(type)
+		ELSE type
+	END,
+	state = CASE
+		WHEN sqlc.arg(set_state)::boolean THEN sqlc.arg(state)
+		ELSE state
+	END,
+	schedule = CASE
+		WHEN sqlc.arg(set_schedule)::boolean THEN sqlc.arg(schedule)
+		ELSE schedule
+	END,
+	deadline = CASE
+		WHEN sqlc.arg(set_deadline)::boolean THEN sqlc.arg(deadline)
+		ELSE deadline
+	END,
+	language = CASE
+		WHEN sqlc.arg(set_language)::boolean THEN sqlc.arg(language)
+		ELSE language
+	END,
+	tags = CASE
+		WHEN sqlc.arg(set_tags)::boolean THEN sqlc.arg(tags)
+		ELSE tags
+	END
 WHERE programs.uuid = sqlc.arg(uuid);
 
 -- name: SignProgramCodeRevision :execrows

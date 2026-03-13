@@ -189,30 +189,33 @@ FROM datasets
 WHERE datasets.uuid = sqlc.arg(uuid)
 LIMIT 1;
 
--- name: SetDatasetNameByUUID :execrows
+-- name: UpdateDatasetByUUID :execrows
 UPDATE datasets
-SET name = sqlc.arg(name)
-WHERE datasets.uuid = sqlc.arg(uuid);
-
--- name: SetDatasetFormatByUUID :execrows
-UPDATE datasets
-SET format = sqlc.arg(format)
-WHERE datasets.uuid = sqlc.arg(uuid);
-
--- name: SetDatasetContentByUUID :execrows
-UPDATE datasets
-SET content = sqlc.arg(content)::bytea,
-    checksum = sha256(sqlc.arg(content)::bytea)
-WHERE datasets.uuid = sqlc.arg(uuid);
-
--- name: SetDatasetThingByUUID :execrows
-UPDATE datasets
-SET belongs_to = sqlc.arg(thing_uuid)
-WHERE datasets.uuid = sqlc.arg(uuid);
-
--- name: SetDatasetTags :execrows
-UPDATE datasets
-SET tags = sqlc.arg(tags)
+SET
+	name = CASE
+		WHEN sqlc.arg(set_name)::boolean THEN sqlc.arg(name)
+		ELSE name
+	END,
+	format = CASE
+		WHEN sqlc.arg(set_format)::boolean THEN sqlc.arg(format)
+		ELSE format
+	END,
+	content = CASE
+		WHEN sqlc.arg(set_content)::boolean THEN sqlc.arg(content)::bytea
+		ELSE content
+	END,
+	checksum = CASE
+		WHEN sqlc.arg(set_content)::boolean THEN sha256(sqlc.arg(content)::bytea)
+		ELSE checksum
+	END,
+	belongs_to = CASE
+		WHEN sqlc.arg(set_thing_uuid)::boolean THEN sqlc.arg(thing_uuid)
+		ELSE belongs_to
+	END,
+	tags = CASE
+		WHEN sqlc.arg(set_tags)::boolean THEN sqlc.arg(tags)
+		ELSE tags
+	END
 WHERE datasets.uuid = sqlc.arg(uuid);
 
 -- name: DeleteDataset :execrows

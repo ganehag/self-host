@@ -202,12 +202,9 @@ func (ra *RestApi) UpdateProgramByUuid(w http.ResponseWriter, r *http.Request, i
 		Tags:     updProgram.Tags,
 	}
 
-	count, err := svc.UpdateProgramByUuid(r.Context(), programUUID, params)
+	_, err = svc.UpdateProgramByUuid(r.Context(), programUUID, params)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	} else if count == 0 {
-		ie.SendHTTPError(w, ie.ErrorNotFound)
 		return
 	}
 

@@ -278,82 +278,51 @@ type UpdateDatasetByUuidParams struct {
 }
 
 func (svc *DatasetService) UpdateDatasetByUuid(ctx context.Context, id uuid.UUID, p UpdateDatasetByUuidParams) (int64, error) {
-	// Use a transaction for this action
-	tx, err := svc.db.BeginTx(ctx, &sql.TxOptions{})
+	setName := p.Name != nil
+	setFormat := p.Format != nil
+	setContent := p.Content != nil
+	setTags := p.Tags != nil
+	setThingUUID := p.ThingUuid != nil
+
+	if !(setName || setFormat || setContent || setTags || setThingUUID) {
+		if _, err := svc.q.FindDatasetByUUID(ctx, id); err != nil {
+			return 0, err
+		}
+		return 1, nil
+	}
+
+	params := postgres.UpdateDatasetByUUIDParams{
+		Uuid:         id,
+		SetName:      setName,
+		SetFormat:    setFormat,
+		SetContent:   setContent,
+		SetTags:      setTags,
+		SetThingUuid: setThingUUID,
+	}
+
+	if p.Name != nil {
+		params.Name = *p.Name
+	}
+	if p.Format != nil {
+		params.Format = *p.Format
+	}
+	if p.Content != nil {
+		params.Content = *p.Content
+	}
+	if p.Tags != nil {
+		params.Tags = *p.Tags
+	}
+	if p.ThingUuid != nil {
+		params.ThingUuid = nullableUUID(p.ThingUuid)
+	}
+
+	count, err := svc.q.UpdateDatasetByUUID(ctx, params)
 	if err != nil {
 		return 0, err
 	}
-
-	var count int64
-
-	q := svc.q.WithTx(tx)
-
-	if p.Name != nil {
-		c, err := q.SetDatasetNameByUUID(ctx, postgres.SetDatasetNameByUUIDParams{
-			Uuid: id,
-			Name: *p.Name,
-		})
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		} else {
-			count += c
-		}
+	if count == 0 {
+		return 0, ie.ErrorNotFound
 	}
-
-	if p.Format != nil {
-		c, err := q.SetDatasetFormatByUUID(ctx, postgres.SetDatasetFormatByUUIDParams{
-			Uuid:   id,
-			Format: *p.Format,
-		})
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		} else {
-			count += c
-		}
-	}
-
-	if p.Content != nil {
-		c, err := q.SetDatasetContentByUUID(ctx, postgres.SetDatasetContentByUUIDParams{
-			Uuid:    id,
-			Content: *p.Content,
-		})
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		} else {
-			count += c
-		}
-	}
-
-	if p.Tags != nil {
-		params := postgres.SetDatasetTagsParams{
-			Uuid: id,
-			Tags: *p.Tags,
-		}
-		c, err := q.SetDatasetTags(ctx, params)
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		}
-		count += c
-	}
-
-	if p.ThingUuid != nil {
-		params := postgres.SetDatasetThingByUUIDParams{
-			Uuid:      id,
-			ThingUuid: nullableUUID(p.ThingUuid),
-		}
-		c, err := q.SetDatasetThingByUUID(ctx, params)
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		}
-		count += c
-	}
-
-	tx.Commit()
 
 	return count, nil
 }

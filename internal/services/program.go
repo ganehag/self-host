@@ -15,6 +15,7 @@ import (
 	"github.com/hexops/gotextdiff/span"
 
 	"github.com/self-host/self-host/api/aapije/rest"
+	ie "github.com/self-host/self-host/internal/errors"
 	"github.com/self-host/self-host/postgres"
 )
 
@@ -311,108 +312,60 @@ type UpdateProgramByUuidParams struct {
 }
 
 func (s *ProgramService) UpdateProgramByUuid(ctx context.Context, id uuid.UUID, p UpdateProgramByUuidParams) (int64, error) {
-	// Use a transaction for this action
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{})
+	setName := p.Name != nil
+	setType := p.Type != nil
+	setState := p.State != nil
+	setSchedule := p.Schedule != nil
+	setDeadline := p.Deadline != nil
+	setLanguage := p.Language != nil
+	setTags := p.Tags != nil
+
+	if !(setName || setType || setState || setSchedule || setDeadline || setLanguage || setTags) {
+		if _, err := s.q.FindProgramByUUID(ctx, id); err != nil {
+			return 0, err
+		}
+		return 1, nil
+	}
+
+	params := postgres.UpdateProgramByUUIDParams{
+		Uuid:        id,
+		SetName:     setName,
+		SetType:     setType,
+		SetState:    setState,
+		SetSchedule: setSchedule,
+		SetDeadline: setDeadline,
+		SetLanguage: setLanguage,
+		SetTags:     setTags,
+	}
+	if p.Name != nil {
+		params.Name = *p.Name
+	}
+	if p.Type != nil {
+		params.Type = *p.Type
+	}
+	if p.State != nil {
+		params.State = *p.State
+	}
+	if p.Schedule != nil {
+		params.Schedule = *p.Schedule
+	}
+	if p.Deadline != nil {
+		params.Deadline = int32(*p.Deadline)
+	}
+	if p.Language != nil {
+		params.Language = *p.Language
+	}
+	if p.Tags != nil {
+		params.Tags = *p.Tags
+	}
+
+	count, err := s.q.UpdateProgramByUUID(ctx, params)
 	if err != nil {
 		return 0, err
 	}
-
-	var count int64
-
-	q := s.q.WithTx(tx)
-
-	if p.Name != nil {
-		c, err := q.SetProgramNameByUUID(ctx, postgres.SetProgramNameByUUIDParams{
-			Uuid: id,
-			Name: *p.Name,
-		})
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		}
-
-		count += c
+	if count == 0 {
+		return 0, ie.ErrorNotFound
 	}
-
-	if p.Type != nil {
-		c, err := q.SetProgramTypeByUUID(ctx, postgres.SetProgramTypeByUUIDParams{
-			Uuid: id,
-			Type: *p.Type,
-		})
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		}
-
-		count += c
-	}
-
-	if p.State != nil {
-		c, err := q.SetProgramStateByUUID(ctx, postgres.SetProgramStateByUUIDParams{
-			Uuid:  id,
-			State: *p.State,
-		})
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		}
-
-		count += c
-	}
-
-	if p.Schedule != nil {
-		c, err := q.SetProgramScheduleByUUID(ctx, postgres.SetProgramScheduleByUUIDParams{
-			Uuid:     id,
-			Schedule: *p.Schedule,
-		})
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		}
-
-		count += c
-	}
-
-	if p.Deadline != nil {
-		c, err := q.SetProgramDeadlineByUUID(ctx, postgres.SetProgramDeadlineByUUIDParams{
-			Uuid:     id,
-			Deadline: int32(*p.Deadline),
-		})
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		}
-
-		count += c
-	}
-
-	if p.Language != nil {
-		c, err := q.SetProgramLanguageByUUID(ctx, postgres.SetProgramLanguageByUUIDParams{
-			Uuid:     id,
-			Language: *p.Language,
-		})
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		}
-
-		count += c
-	}
-
-	if p.Tags != nil {
-		params := postgres.SetProgramTagsParams{
-			Uuid: id,
-			Tags: *p.Tags,
-		}
-		c, err := q.SetProgramTags(ctx, params)
-		if err != nil {
-			tx.Rollback()
-			return 0, err
-		}
-		count += c
-	}
-
-	tx.Commit()
 
 	return count, nil
 }
