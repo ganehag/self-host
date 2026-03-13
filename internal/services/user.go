@@ -25,6 +25,13 @@ type UserService struct {
 	db *sql.DB
 }
 
+type UpdateUserParams struct {
+	Name         *string
+	Groups       *[]uuid.UUID
+	GroupsAdd    []uuid.UUID
+	GroupsRemove []uuid.UUID
+}
+
 // NewUser instantiates the User repository.
 func NewUserService(db *sql.DB) *UserService {
 	return &UserService{
@@ -324,6 +331,84 @@ func (u *UserService) SetUserGroups(ctx context.Context, userUUID uuid.UUID, gro
 	tx.Commit()
 
 	return count + addedCount, nil
+}
+
+func (u *UserService) UpdateUser(ctx context.Context, userUUID uuid.UUID, p UpdateUserParams) (int64, error) {
+	tx, err := u.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return 0, err
+	}
+
+	q := u.q.WithTx(tx)
+	var count int64
+
+	if p.Name != nil && len(*p.Name) > 3 {
+		c, err := q.SetUserName(ctx, postgres.SetUserNameParams{
+			Uuid: userUUID,
+			Name: *p.Name,
+		})
+		if err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+		count += c
+	}
+
+	if p.Groups != nil {
+		c, err := q.RemoveUserFromAllGroups(ctx, userUUID)
+		if err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+		count += c
+
+		if len(*p.Groups) > 0 {
+			c, err = q.AddUserToGroups(ctx, postgres.AddUserToGroupsParams{
+				UserUuid:   userUUID,
+				GroupUuids: *p.Groups,
+			})
+			if err != nil {
+				tx.Rollback()
+				return 0, err
+			}
+			count += c
+		}
+	} else {
+		if len(p.GroupsRemove) > 0 {
+			c, err := q.RemoveUserFromGroups(ctx, postgres.RemoveUserFromGroupsParams{
+				UserUuid:   userUUID,
+				GroupUuids: p.GroupsRemove,
+			})
+			if err != nil {
+				tx.Rollback()
+				return 0, err
+			}
+			count += c
+		}
+
+		if len(p.GroupsAdd) > 0 {
+			c, err := q.AddUserToGroups(ctx, postgres.AddUserToGroupsParams{
+				UserUuid:   userUUID,
+				GroupUuids: p.GroupsAdd,
+			})
+			if err != nil {
+				tx.Rollback()
+				return 0, err
+			}
+			count += c
+		}
+	}
+
+	if count == 0 {
+		if _, err := q.FindUserByUUID(ctx, userUUID); err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+	}
+
+	tx.Commit()
+
+	return count, nil
 }
 
 func (u *UserService) SetUserName(ctx context.Context, userUUID uuid.UUID, name string) (int64, error) {

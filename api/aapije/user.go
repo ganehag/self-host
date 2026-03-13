@@ -233,16 +233,10 @@ func (ra *RestApi) UpdateUserByUuid(w http.ResponseWriter, r *http.Request, id r
 		return
 	}
 
-	if updUser.Name != nil && len(*updUser.Name) > 3 {
-		_, err := svc.SetUserName(r.Context(), userUUID, *updUser.Name)
-		if err != nil {
-			ie.SendHTTPError(w, ie.ParseDBError(err))
-			return
-		}
+	params := services.UpdateUserParams{
+		Name: updUser.Name,
 	}
 
-	// Use multiple DB requests to set each parameter
-	// Use a Transaction!
 	if updUser.Groups != nil {
 		groupUUIDs := make([]uuid.UUID, 0)
 		for _, item := range *updUser.Groups {
@@ -253,14 +247,7 @@ func (ra *RestApi) UpdateUserByUuid(w http.ResponseWriter, r *http.Request, id r
 			}
 			groupUUIDs = append(groupUUIDs, uid)
 		}
-
-		// FIXME: handle count value
-		_, err := svc.SetUserGroups(r.Context(), userUUID, groupUUIDs)
-		if err != nil {
-			ie.SendHTTPError(w, ie.ParseDBError(err))
-			return
-		}
-
+		params.Groups = &groupUUIDs
 	} else if updUser.GroupsAdd != nil || updUser.GroupsRemove != nil {
 		addGroupUUIDs := make([]uuid.UUID, 0)
 		removeGroupUUIDs := make([]uuid.UUID, 0)
@@ -286,14 +273,14 @@ func (ra *RestApi) UpdateUserByUuid(w http.ResponseWriter, r *http.Request, id r
 				removeGroupUUIDs = append(removeGroupUUIDs, uid)
 			}
 		}
+		params.GroupsAdd = addGroupUUIDs
+		params.GroupsRemove = removeGroupUUIDs
+	}
 
-		// FIXME: Should we validate the group uuids?
-		// FIXME: handle count value
-		_, err := svc.AddRemoveUserToGroups(r.Context(), userUUID, addGroupUUIDs, removeGroupUUIDs)
-		if err != nil {
-			ie.SendHTTPError(w, ie.ParseDBError(err))
-			return
-		}
+	_, err = svc.UpdateUser(r.Context(), userUUID, params)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
