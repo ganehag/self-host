@@ -206,6 +206,18 @@ func (svc *DatasetUploadService) CancelUpload(ctx context.Context, datasetUUID u
 		return ie.ErrorNotFound
 	}
 
+	if svc.opt.Store != nil && upload.StorageBackend == DatasetStorageBackendS3 {
+		if err := svc.opt.Store.AbortMultipartUpload(ctx, DatasetObjectRef{
+			Backend: upload.StorageBackend,
+			Bucket:  nullableSQLString(upload.StorageBucket),
+			Key:     nullableSQLString(upload.StorageKey),
+		}, nullableSQLString(upload.BackendUploadID)); err != nil {
+			return err
+		}
+	} else if err := os.RemoveAll(svc.uploadDir(uploadID)); err != nil {
+		return err
+	}
+
 	count, err := svc.q.DeleteDatasetUploadByID(ctx, uploadID)
 	if err != nil {
 		return err
@@ -214,15 +226,7 @@ func (svc *DatasetUploadService) CancelUpload(ctx context.Context, datasetUUID u
 		return ie.ErrorNotFound
 	}
 
-	if svc.opt.Store != nil && upload.StorageBackend == DatasetStorageBackendS3 {
-		return svc.opt.Store.AbortMultipartUpload(ctx, DatasetObjectRef{
-			Backend: upload.StorageBackend,
-			Bucket:  nullableSQLString(upload.StorageBucket),
-			Key:     nullableSQLString(upload.StorageKey),
-		}, nullableSQLString(upload.BackendUploadID))
-	}
-
-	return os.RemoveAll(svc.uploadDir(uploadID))
+	return nil
 }
 
 func (svc *DatasetUploadService) AssembleUpload(ctx context.Context, datasetUUID uuid.UUID, uploadID string, expectedMD5 string) error {
@@ -234,10 +238,7 @@ func (svc *DatasetUploadService) AssembleUpload(ctx context.Context, datasetUUID
 		return ie.ErrorNotFound
 	}
 
-	ds, err := svc.q.FindDatasetByUUID(ctx, datasetUUID)
-	if err != nil {
-		return err
-	}
+	previousRef, _ := svc.q.GetDatasetObjectRefByUUID(ctx, datasetUUID)
 
 	parts, err := svc.q.FindDatasetUploadParts(ctx, uploadID)
 	if err != nil {
@@ -301,35 +302,6 @@ func (svc *DatasetUploadService) AssembleUpload(ctx context.Context, datasetUUID
 				return ie.NewBadRequestError(fmt.Errorf("BadDigest"))
 			}
 		}
-
-		finalRef := svc.opt.Storage.ContentRef(datasetUUID.String())
-		if finalRef.Key != metadata.Key || finalRef.Bucket != metadata.Bucket {
-			body, err := svc.opt.Store.GetObject(ctx, DatasetObjectRef{
-				Backend: metadata.Backend,
-				Bucket:  metadata.Bucket,
-				Key:     metadata.Key,
-			})
-			if err != nil {
-				return err
-			}
-
-			payload, err := io.ReadAll(body)
-			body.Close()
-			if err != nil {
-				return err
-			}
-
-			finalMeta, err := svc.opt.Store.PutObject(ctx, finalRef, payload, ds.Format)
-			if err != nil {
-				return err
-			}
-			_ = svc.opt.Store.DeleteObject(ctx, DatasetObjectRef{
-				Backend: metadata.Backend,
-				Bucket:  metadata.Bucket,
-				Key:     metadata.Key,
-			})
-			metadata = finalMeta
-		}
 	} else {
 		inlineContent, metadata, err = svc.assembleInlineUpload(uploadID, parts, expectedMD5)
 		if err != nil {
@@ -337,7 +309,7 @@ func (svc *DatasetUploadService) AssembleUpload(ctx context.Context, datasetUUID
 		}
 	}
 
-	_, err = svc.q.UpdateDatasetByUUID(ctx, postgres.UpdateDatasetByUUIDParams{
+	count, err := svc.q.UpdateDatasetByUUID(ctx, postgres.UpdateDatasetByUUIDParams{
 		Uuid:           datasetUUID,
 		SetContent:     true,
 		Content:        inlineContent,
@@ -348,7 +320,36 @@ func (svc *DatasetUploadService) AssembleUpload(ctx context.Context, datasetUUID
 		StorageKey:     metadata.Key,
 	})
 	if err != nil {
+		if svc.opt.Store != nil && metadata.Backend == DatasetStorageBackendS3 && metadata.Bucket != "" && metadata.Key != "" {
+			_ = svc.opt.Store.DeleteObject(ctx, DatasetObjectRef{
+				Backend: metadata.Backend,
+				Bucket:  metadata.Bucket,
+				Key:     metadata.Key,
+			})
+		}
 		return err
+	}
+	if count == 0 {
+		if svc.opt.Store != nil && metadata.Backend == DatasetStorageBackendS3 && metadata.Bucket != "" && metadata.Key != "" {
+			_ = svc.opt.Store.DeleteObject(ctx, DatasetObjectRef{
+				Backend: metadata.Backend,
+				Bucket:  metadata.Bucket,
+				Key:     metadata.Key,
+			})
+		}
+		return ie.ErrorNotFound
+	}
+
+	if svc.opt.Store != nil &&
+		previousRef.StorageBackend == DatasetStorageBackendS3 &&
+		previousRef.StorageBucket.Valid &&
+		previousRef.StorageKey.Valid &&
+		(previousRef.StorageBucket.String != metadata.Bucket || previousRef.StorageKey.String != metadata.Key) {
+		_ = svc.opt.Store.DeleteObject(ctx, DatasetObjectRef{
+			Backend: previousRef.StorageBackend,
+			Bucket:  previousRef.StorageBucket.String,
+			Key:     previousRef.StorageKey.String,
+		})
 	}
 
 	if _, err := svc.q.DeleteDatasetUploadByID(ctx, uploadID); err != nil {

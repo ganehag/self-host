@@ -1185,12 +1185,15 @@ func splitDailyRollupRanges(start, end time.Time) (*timeRange, []timeRange) {
 		return nil, nil
 	}
 
-	firstFullDay := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+	start = start.UTC()
+	end = end.UTC()
+
+	firstFullDay := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
 	if firstFullDay.Before(start) {
 		firstFullDay = firstFullDay.AddDate(0, 0, 1)
 	}
 
-	lastFullDay := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, end.Location())
+	lastFullDay := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.UTC)
 	if lastFullDay.AddDate(0, 0, 1).After(end.Add(time.Microsecond)) {
 		lastFullDay = lastFullDay.AddDate(0, 0, -1)
 	}

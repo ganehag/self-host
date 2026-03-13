@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/google/uuid"
 )
 
 const (
@@ -134,6 +135,18 @@ func (opt DatasetStorageOptions) ContentRef(datasetUUID string) DatasetObjectRef
 	}
 }
 
+func (opt DatasetStorageOptions) WriteRef(datasetUUID string) DatasetObjectRef {
+	if opt.Backend != DatasetStorageBackendS3 || opt.S3 == nil {
+		return DatasetObjectRef{Backend: DatasetStorageBackendInline}
+	}
+
+	return DatasetObjectRef{
+		Backend: DatasetStorageBackendS3,
+		Bucket:  opt.S3.Bucket,
+		Key:     objectKey(opt, datasetUUID, path.Join("objects", uuid.NewString())),
+	}
+}
+
 func (opt DatasetStorageOptions) UploadRef(datasetUUID, uploadID string) DatasetObjectRef {
 	if opt.Backend != DatasetStorageBackendS3 || opt.S3 == nil {
 		return DatasetObjectRef{Backend: DatasetStorageBackendInline}
@@ -142,7 +155,7 @@ func (opt DatasetStorageOptions) UploadRef(datasetUUID, uploadID string) Dataset
 	return DatasetObjectRef{
 		Backend: DatasetStorageBackendS3,
 		Bucket:  opt.S3.Bucket,
-		Key:     objectKey(opt, datasetUUID, path.Join("uploads", uploadID)),
+		Key:     objectKey(opt, datasetUUID, path.Join("objects", uploadID)),
 	}
 }
 

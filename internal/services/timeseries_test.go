@@ -8,6 +8,7 @@ import (
 	"context"
 	"log"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -119,5 +120,31 @@ func TestInValidRange(t *testing.T) {
 		if inValidRange(row.V, row.Le, row.Ge) != row.Res {
 			log.Fatal("Check failed")
 		}
+	}
+}
+
+func TestSplitDailyRollupRangesUsesUTCBoundaries(t *testing.T) {
+	start := time.Date(2024, 1, 1, 23, 30, 0, 0, time.FixedZone("UTC+2", 2*60*60))
+	end := time.Date(2024, 1, 4, 2, 0, 0, 0, time.FixedZone("UTC+2", 2*60*60))
+
+	rollupRange, rawRanges := splitDailyRollupRanges(start, end)
+	if rollupRange == nil {
+		t.Fatal("expected daily rollup range")
+	}
+
+	if !rollupRange.Start.Equal(time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("unexpected rollup start: %s", rollupRange.Start)
+	}
+	if !rollupRange.Stop.Equal(time.Date(2024, 1, 3, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("unexpected rollup stop: %s", rollupRange.Stop)
+	}
+	if len(rawRanges) != 2 {
+		t.Fatalf("expected 2 raw ranges, got %d", len(rawRanges))
+	}
+	if !rawRanges[0].Stop.Equal(time.Date(2024, 1, 1, 23, 59, 59, int(time.Second-time.Microsecond), time.UTC)) {
+		t.Fatalf("unexpected left raw stop: %s", rawRanges[0].Stop)
+	}
+	if !rawRanges[1].Start.Equal(time.Date(2024, 1, 4, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("unexpected right raw start: %s", rawRanges[1].Start)
 	}
 }

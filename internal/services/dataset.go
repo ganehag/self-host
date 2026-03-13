@@ -90,7 +90,7 @@ func (svc *DatasetService) AddDataset(ctx context.Context, p *AddDatasetParams) 
 	inlineContent := content
 
 	if svc.store != nil && len(content) > 0 {
-		ref := svc.opt.ContentRef(datasetUUID.String())
+		ref := svc.opt.WriteRef(datasetUUID.String())
 		meta, err := svc.store.PutObject(ctx, ref, content, p.Format)
 		if err != nil {
 			return nil, err
@@ -404,7 +404,7 @@ func (svc *DatasetService) UpdateDatasetByUuid(ctx context.Context, id uuid.UUID
 				format = current.Format
 			}
 
-			ref := svc.opt.ContentRef(id.String())
+			ref := svc.opt.WriteRef(id.String())
 			meta, err := svc.store.PutObject(ctx, ref, content, format)
 			if err != nil {
 				return 0, err
@@ -427,9 +427,23 @@ func (svc *DatasetService) UpdateDatasetByUuid(ctx context.Context, id uuid.UUID
 
 	count, err := svc.q.UpdateDatasetByUUID(ctx, params)
 	if err != nil {
+		if svc.store != nil && params.StorageBackend == DatasetStorageBackendS3 && params.StorageBucket != "" && params.StorageKey != "" {
+			_ = svc.store.DeleteObject(ctx, DatasetObjectRef{
+				Backend: params.StorageBackend,
+				Bucket:  params.StorageBucket,
+				Key:     params.StorageKey,
+			})
+		}
 		return 0, err
 	}
 	if count == 0 {
+		if svc.store != nil && params.StorageBackend == DatasetStorageBackendS3 && params.StorageBucket != "" && params.StorageKey != "" {
+			_ = svc.store.DeleteObject(ctx, DatasetObjectRef{
+				Backend: params.StorageBackend,
+				Bucket:  params.StorageBucket,
+				Key:     params.StorageKey,
+			})
+		}
 		return 0, ie.ErrorNotFound
 	}
 
