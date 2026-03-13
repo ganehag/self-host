@@ -1,0 +1,10 @@
+listen:
+  host: 0.0.0.0
+  port: 80
+
+domainfile: domains.yaml
+
+rate_control:
+  req_per_hour: 10000000
+  maxburst: 100000
+  cleanup: "20minutes"

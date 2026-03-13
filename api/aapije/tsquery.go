@@ -19,8 +19,8 @@ import (
 // FindTsdataByQuery query multiple time series for data
 func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p rest.FindTsdataByQueryParams) {
 	timezone := "UTC"
-	aggregate := "avg"
-	precision := "microseconds"
+	aggregate := ""
+	precision := ""
 
 	if time.Time(p.End).Sub(time.Time(p.Start)) > 31622401*time.Second {
 		// FIXME: these errors should be declared in one location

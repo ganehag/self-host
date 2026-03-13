@@ -1,0 +1,45 @@
+name: mixed
+base_url: http://127.0.0.1:8080
+domain: test
+token: root
+duration: 90s
+warmup: 10s
+concurrency: 24
+timeout: 10s
+headers:
+  Accept: application/json
+operations:
+  - name: read_day
+    weight: 28
+    method: GET
+    path: /v2/timeseries/{{ seriesUUID 0 }}/data?start={{ windowStart "day" }}&end={{ windowEnd "day" }}
+    expected_statuses: [200]
+  - name: read_week
+    weight: 18
+    method: GET
+    path: /v2/timeseries/{{ seriesUUID 1 }}/data?start={{ windowStart "week" }}&end={{ windowEnd "week" }}
+    expected_statuses: [200]
+  - name: read_month
+    weight: 12
+    method: GET
+    path: /v2/timeseries/{{ seriesUUID 2 }}/data?start={{ windowStart "month" }}&end={{ windowEnd "month" }}
+    expected_statuses: [200]
+  - name: list_programs
+    weight: 6
+    method: GET
+    path: /v2/programs?limit=50
+    expected_statuses: [200]
+  - name: list_users
+    weight: 6
+    method: GET
+    path: /v2/users?limit=50
+    expected_statuses: [200]
+  - name: write_single
+    weight: 10
+    method: POST
+    path: /v2/timeseries/{{ seriesUUID 3 }}/data?unit=C
+    headers:
+      Content-Type: application/json
+    body: |
+      [{"v": 2.71, "ts": "{{ nowRFC3339Nano }}"}]
+    expected_statuses: [200, 201, 204]

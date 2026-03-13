@@ -22,29 +22,51 @@ func OapiRequestValidator(swagger *openapi3.T) func(http.Handler) http.Handler {
 
 // Validate a request against the OpenAPI specification (with options)
 func OapiRequestValidatorWithOptions(swagger *openapi3.T, options *Options) func(http.Handler) http.Handler {
+	if swagger == nil {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
+
 	router, err := legacyrouter.NewRouter(swagger)
 	if err != nil {
-		// Fatal?
-		// FIXME: log error
+		return func(next http.Handler) http.Handler {
+			return next
+		}
 	}
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if router == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			route, pathParams, err := router.FindRoute(r)
 			if err != nil {
 				ie.SendHTTPError(w, ie.NewInvalidRequestError(err))
 				return
 			}
 
+			filterOptions := &openapi3filter.Options{
+				AuthenticationFunc: func(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
+					return nil
+				},
+			}
+			if options != nil {
+				filterOptions = &options.Options
+				if filterOptions.AuthenticationFunc == nil {
+					filterOptions.AuthenticationFunc = func(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
+						return nil
+					}
+				}
+			}
+
 			requestValidationInput := &openapi3filter.RequestValidationInput{
 				Request:    r,
 				PathParams: pathParams,
 				Route:      route,
-				Options: &openapi3filter.Options{
-					AuthenticationFunc: func(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
-						return nil
-					},
-				},
+				Options:    filterOptions,
 			}
 			if err := openapi3filter.ValidateRequest(r.Context(), requestValidationInput); err != nil {
 				e, ok := err.(*openapi3filter.RequestError)

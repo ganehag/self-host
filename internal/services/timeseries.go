@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -476,18 +477,55 @@ func (svc *TimeseriesService) QuerySingleSourceData(ctx context.Context, p Query
 		return nil, err
 	}
 
-	params := postgres.GetTsDataRangeAggParams{
-		Aggregate: p.Aggregate,
-		Truncate:  p.Precision,
-		Timezone:  p.Timezone,
-		TsUuids: []uuid.UUID{
-			p.Uuid, // Expects a list of time series
-		},
-		Start: p.Start,
-		Stop:  p.End,
+	if shouldAggregateData(p.Aggregate, p.Precision) {
+		params := postgres.GetTsDataRangeAggParams{
+			Aggregate: p.Aggregate,
+			Truncate:  p.Precision,
+			Timezone:  p.Timezone,
+			TsUuids: []uuid.UUID{
+				p.Uuid, // Expects a list of time series
+			},
+			Start: p.Start,
+			Stop:  p.End,
+		}
+
+		dataList, err := svc.q.GetTsDataRangeAgg(ctx, params)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, item := range dataList {
+			var f float32
+			if p.Unit != nil {
+				v := units.NewValue(item.Value, fromUnit)
+				conv, err := v.Convert(toUnit)
+				if err != nil {
+					return nil, ie.ErrorInvalidUnitConversion
+				}
+				f = float32(conv.Float())
+			} else {
+				f = float32(item.Value)
+			}
+
+			if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+				continue
+			}
+
+			d := rest.TsRow{
+				V:  f,
+				Ts: item.Ts.In(tzloc),
+			}
+			tsdata = append(tsdata, &d)
+		}
+
+		return tsdata, nil
 	}
 
-	dataList, err := svc.q.GetTsDataRangeAgg(ctx, params)
+	dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+		TsUuids: []uuid.UUID{p.Uuid},
+		Start:   p.Start,
+		Stop:    p.End,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -536,36 +574,64 @@ func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryM
 		return nil, ie.NewInvalidRequestError(err)
 	}
 
-	params := postgres.GetTsDataRangeAggParams{
-		Aggregate: p.Aggregate,
-		Truncate:  p.Precision,
-		Timezone:  p.Timezone,
-		TsUuids:   p.Uuids,
-		Start:     p.Start,
-		Stop:      p.End,
-	}
-
 	mapping := make(map[uuid.UUID][]rest.TsRow, 0)
-	dataList, err := svc.q.GetTsDataRangeAgg(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, item := range dataList {
-		if _, ok := mapping[item.TsUuid]; ok == false {
-			mapping[item.TsUuid] = make([]rest.TsRow, 0)
+	if shouldAggregateData(p.Aggregate, p.Precision) {
+		params := postgres.GetTsDataRangeAggParams{
+			Aggregate: p.Aggregate,
+			Truncate:  p.Precision,
+			Timezone:  p.Timezone,
+			TsUuids:   p.Uuids,
+			Start:     p.Start,
+			Stop:      p.End,
 		}
 
-		f := float32(item.Value)
-
-		if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
-			continue
+		dataList, err := svc.q.GetTsDataRangeAgg(ctx, params)
+		if err != nil {
+			return nil, err
 		}
 
-		mapping[item.TsUuid] = append(mapping[item.TsUuid], rest.TsRow{
-			V:  f,
-			Ts: item.Ts.In(tzloc),
+		for _, item := range dataList {
+			if _, ok := mapping[item.TsUuid]; ok == false {
+				mapping[item.TsUuid] = make([]rest.TsRow, 0)
+			}
+
+			f := float32(item.Value)
+
+			if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+				continue
+			}
+
+			mapping[item.TsUuid] = append(mapping[item.TsUuid], rest.TsRow{
+				V:  f,
+				Ts: item.Ts.In(tzloc),
+			})
+		}
+	} else {
+		dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+			TsUuids: p.Uuids,
+			Start:   p.Start,
+			Stop:    p.End,
 		})
+		if err != nil {
+			return nil, err
+		}
+
+		for _, item := range dataList {
+			if _, ok := mapping[item.TsUuid]; ok == false {
+				mapping[item.TsUuid] = make([]rest.TsRow, 0)
+			}
+
+			f := float32(item.Value)
+
+			if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+				continue
+			}
+
+			mapping[item.TsUuid] = append(mapping[item.TsUuid], rest.TsRow{
+				V:  f,
+				Ts: item.Ts.In(tzloc),
+			})
+		}
 	}
 
 	tsResult := make([]*rest.TsResults, 0)
@@ -577,6 +643,10 @@ func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryM
 	}
 
 	return tsResult, nil
+}
+
+func shouldAggregateData(aggregate, precision string) bool {
+	return strings.TrimSpace(precision) != "" && strings.TrimSpace(aggregate) != ""
 }
 
 type UpdateTimeseriesParams struct {

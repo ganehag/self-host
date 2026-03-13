@@ -204,14 +204,10 @@ func (ra *RestApi) QueryTimeseriesForData(w http.ResponseWriter, r *http.Request
 
 	if p.Aggregate != nil {
 		params.Aggregate = string(*p.Aggregate)
-	} else {
-		params.Aggregate = "avg"
 	}
 
 	if p.Precision != nil {
 		params.Precision = string(*p.Precision)
-	} else {
-		params.Precision = "microseconds"
 	}
 
 	data, err := svc.QuerySingleSourceData(r.Context(), params)
