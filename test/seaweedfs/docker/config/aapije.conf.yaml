@@ -1,0 +1,33 @@
+listen:
+  host: 0.0.0.0
+  port: 80
+
+domainfile: domains.yaml
+
+request_logging:
+  enabled: false
+
+openapi_validation:
+  enabled: false
+
+db_pool:
+  max_open_conns: 16
+  max_idle_conns: 8
+  conn_max_lifetime: "30m"
+  conn_max_idle_time: "5m"
+
+dataset_storage:
+  backend: s3
+  s3:
+    endpoint: "http://seaweedfs:8333"
+    region: "us-east-1"
+    bucket: "selfhost-datasets"
+    access_key_id: "selfhost"
+    secret_access_key: "selfhost-secret"
+    use_ssl: false
+    force_path_style: true
+    key_prefix: "datasets"
+
+dataset_uploads:
+  max_part_size: 16777216
+  max_total_size: 134217728

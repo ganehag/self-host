@@ -234,6 +234,11 @@ func (svc *DatasetUploadService) AssembleUpload(ctx context.Context, datasetUUID
 		return ie.ErrorNotFound
 	}
 
+	ds, err := svc.q.FindDatasetByUUID(ctx, datasetUUID)
+	if err != nil {
+		return err
+	}
+
 	parts, err := svc.q.FindDatasetUploadParts(ctx, uploadID)
 	if err != nil {
 		return err
@@ -295,6 +300,35 @@ func (svc *DatasetUploadService) AssembleUpload(ctx context.Context, datasetUUID
 			if actual := hex.EncodeToString(hasher.Sum(nil)); !strings.EqualFold(actual, expectedMD5) {
 				return ie.NewBadRequestError(fmt.Errorf("BadDigest"))
 			}
+		}
+
+		finalRef := svc.opt.Storage.ContentRef(datasetUUID.String())
+		if finalRef.Key != metadata.Key || finalRef.Bucket != metadata.Bucket {
+			body, err := svc.opt.Store.GetObject(ctx, DatasetObjectRef{
+				Backend: metadata.Backend,
+				Bucket:  metadata.Bucket,
+				Key:     metadata.Key,
+			})
+			if err != nil {
+				return err
+			}
+
+			payload, err := io.ReadAll(body)
+			body.Close()
+			if err != nil {
+				return err
+			}
+
+			finalMeta, err := svc.opt.Store.PutObject(ctx, finalRef, payload, ds.Format)
+			if err != nil {
+				return err
+			}
+			_ = svc.opt.Store.DeleteObject(ctx, DatasetObjectRef{
+				Backend: metadata.Backend,
+				Bucket:  metadata.Bucket,
+				Key:     metadata.Key,
+			})
+			metadata = finalMeta
 		}
 	} else {
 		inlineContent, metadata, err = svc.assembleInlineUpload(uploadID, parts, expectedMD5)
