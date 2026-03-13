@@ -115,7 +115,7 @@ func (svc *TimeseriesService) AddTimeseries(ctx context.Context, opt *NewTimeser
 	}
 
 	params := postgres.CreateTimeseriesParams{
-		CreatedBy:  opt.CreatedBy,
+		CreatedBy:  nullableUUIDValue(opt.CreatedBy),
 		ThingUuid:  opt.ThingUuid,
 		Name:       opt.Name,
 		SiUnit:     opt.SiUnit,
@@ -145,7 +145,7 @@ func (svc *TimeseriesService) AddTimeseries(ctx context.Context, opt *NewTimeser
 
 	t := &rest.Timeseries{
 		Uuid:       timeseries.Uuid.String(),
-		CreatedBy:  timeseries.CreatedBy.String(),
+		CreatedBy:  nullableUUIDString(timeseries.CreatedBy),
 		Name:       timeseries.Name,
 		SiUnit:     timeseries.SiUnit,
 		LowerBound: lb,
@@ -153,8 +153,8 @@ func (svc *TimeseriesService) AddTimeseries(ctx context.Context, opt *NewTimeser
 		Tags:       timeseries.Tags,
 	}
 
-	if timeseries.ThingUuid != NilUUID {
-		v := timeseries.ThingUuid.String()
+	if timeseries.ThingUuid.Valid {
+		v := timeseries.ThingUuid.UUID.String()
 		t.ThingUuid = &v
 	}
 
@@ -280,7 +280,7 @@ func (svc *TimeseriesService) FindByTags(ctx context.Context, p FindByTagsParams
 		}
 
 		t := &rest.Timeseries{
-			CreatedBy:  item.CreatedBy.String(),
+			CreatedBy:  nullableUUIDString(item.CreatedBy),
 			LowerBound: lBound,
 			Name:       item.Name,
 			SiUnit:     item.SiUnit,
@@ -289,8 +289,8 @@ func (svc *TimeseriesService) FindByTags(ctx context.Context, p FindByTagsParams
 			Uuid:       item.Uuid.String(),
 		}
 
-		if item.ThingUuid != NilUUID {
-			v := item.ThingUuid.String()
+		if item.ThingUuid.Valid {
+			v := item.ThingUuid.UUID.String()
 			t.ThingUuid = &v
 		}
 
@@ -310,7 +310,7 @@ func (svc *TimeseriesService) FindByThing(ctx context.Context, thing uuid.UUID) 
 		return nil, ie.ErrorNotFound
 	}
 
-	tsList, err := svc.q.FindTimeseriesByThing(ctx, thing)
+	tsList, err := svc.q.FindTimeseriesByThing(ctx, nullableUUIDValue(thing))
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +327,7 @@ func (svc *TimeseriesService) FindByThing(ctx context.Context, thing uuid.UUID) 
 		}
 
 		t := &rest.Timeseries{
-			CreatedBy:  item.CreatedBy.String(),
+			CreatedBy:  nullableUUIDString(item.CreatedBy),
 			LowerBound: lBound,
 			Name:       item.Name,
 			SiUnit:     item.SiUnit,
@@ -336,8 +336,8 @@ func (svc *TimeseriesService) FindByThing(ctx context.Context, thing uuid.UUID) 
 			Uuid:       item.Uuid.String(),
 		}
 
-		if item.ThingUuid != NilUUID {
-			v := item.ThingUuid.String()
+		if item.ThingUuid.Valid {
+			v := item.ThingUuid.UUID.String()
 			t.ThingUuid = &v
 		}
 
@@ -370,11 +370,11 @@ func (svc *TimeseriesService) FindByUuid(ctx context.Context, id uuid.UUID) (*re
 		Tags:       t.Tags,
 		LowerBound: lBound,
 		UpperBound: uBound,
-		CreatedBy:  t.CreatedBy.String(),
+		CreatedBy:  nullableUUIDString(t.CreatedBy),
 	}
 
-	if t.ThingUuid != NilUUID {
-		v := t.ThingUuid.String()
+	if t.ThingUuid.Valid {
+		v := t.ThingUuid.UUID.String()
 		timeseries.ThingUuid = &v
 	}
 
@@ -417,11 +417,11 @@ func (svc *TimeseriesService) FindAll(ctx context.Context, p FindAllParams) ([]*
 			UpperBound: uBound,
 			LowerBound: lBound,
 			Tags:       item.Tags,
-			CreatedBy:  item.CreatedBy.String(),
+			CreatedBy:  nullableUUIDString(item.CreatedBy),
 		}
 
-		if item.ThingUuid != NilUUID {
-			v := item.ThingUuid.String()
+		if item.ThingUuid.Valid {
+			v := item.ThingUuid.UUID.String()
 			t.ThingUuid = &v
 		}
 
@@ -701,7 +701,7 @@ func (svc *TimeseriesService) UpdateTimeseries(ctx context.Context, p UpdateTime
 	if p.ThingUuid != nil {
 		params := postgres.SetTimeseriesThingParams{
 			Uuid:      p.Uuid,
-			ThingUuid: *p.ThingUuid,
+			ThingUuid: nullableUUID(p.ThingUuid),
 		}
 		c, err := q.SetTimeseriesThing(ctx, params)
 		if err != nil {

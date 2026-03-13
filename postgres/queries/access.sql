@@ -1,9 +1,8 @@
 -- name: CheckUserTokenHasAccess :one
 WITH usr AS (
-	SELECT users.uuid
-	FROM users, user_tokens
-	WHERE user_tokens.user_uuid = users.uuid
-	AND user_tokens.token_hash = sha256(sqlc.arg(token))
+	SELECT user_tokens.user_uuid AS uuid
+	FROM user_tokens
+	WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
 	LIMIT 1
 ) SELECT COALESCE((SELECT user_has_access(
 	usr.uuid,
@@ -13,10 +12,9 @@ WITH usr AS (
 
 -- name: CheckUserTokenHasAccessMany :one
 WITH usr AS (
-	SELECT users.uuid
-	FROM users, user_tokens
-	WHERE user_tokens.user_uuid = users.uuid
-	AND user_tokens.token_hash = sha256(sqlc.arg(token))
+	SELECT user_tokens.user_uuid AS uuid
+	FROM user_tokens
+	WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
 	LIMIT 1
 ), usr_r AS (
 	SELECT

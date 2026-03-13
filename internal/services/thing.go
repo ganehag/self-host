@@ -72,7 +72,7 @@ func (svc *ThingService) AddThing(ctx context.Context, p *AddThingParams) (*rest
 	}
 
 	if p.CreatedBy != nil {
-		params.CreatedBy = *p.CreatedBy
+		params.CreatedBy = nullableUUID(p.CreatedBy)
 	}
 
 	q := svc.q.WithTx(tx)
@@ -88,7 +88,7 @@ func (svc *ThingService) AddThing(ctx context.Context, p *AddThingParams) (*rest
 	v := &rest.Thing{
 		Uuid:      thing.Uuid.String(),
 		Name:      thing.Name,
-		CreatedBy: thing.CreatedBy.String(),
+		CreatedBy: nullableUUIDString(thing.CreatedBy),
 		State:     rest.ThingState(thing.State),
 		Tags:      thing.Tags,
 	}
@@ -110,7 +110,7 @@ func (svc *ThingService) FindThingByUuid(ctx context.Context, thingUUID uuid.UUI
 		Uuid:      t.Uuid.String(),
 		Name:      t.Name,
 		State:     rest.ThingState(t.State),
-		CreatedBy: t.CreatedBy.String(),
+		CreatedBy: nullableUUIDString(t.CreatedBy),
 		Tags:      t.Tags,
 	}
 
@@ -145,7 +145,7 @@ func (svc *ThingService) FindAll(ctx context.Context, p FindAllParams) ([]*rest.
 			Uuid:      t.Uuid.String(),
 			Name:      t.Name,
 			State:     rest.ThingState(t.State),
-			CreatedBy: t.CreatedBy.String(),
+			CreatedBy: nullableUUIDString(t.CreatedBy),
 			Tags:      t.Tags,
 		}
 		if t.Type.Valid {
@@ -182,7 +182,7 @@ func (svc *ThingService) FindByTags(ctx context.Context, p FindByTagsParams) ([]
 			Uuid:      t.Uuid.String(),
 			Name:      t.Name,
 			State:     rest.ThingState(t.State),
-			CreatedBy: t.CreatedBy.String(),
+			CreatedBy: nullableUUIDString(t.CreatedBy),
 			Tags:      t.Tags,
 		}
 		if t.Type.Valid {

@@ -87,7 +87,7 @@ type AddCodeRevisionParams struct {
 func (s *ProgramService) AddCodeRevision(ctx context.Context, p AddCodeRevisionParams) (*rest.CodeRevision, error) {
 	params := postgres.CreateCodeRevisionParams{
 		ProgramUuid: p.ProgramUuid,
-		CreatedBy:   p.CreatedBy,
+		CreatedBy:   nullableUUIDValue(p.CreatedBy),
 		Code:        p.Code,
 	}
 
@@ -99,15 +99,15 @@ func (s *ProgramService) AddCodeRevision(ctx context.Context, p AddCodeRevisionP
 	v := &rest.CodeRevision{
 		Revision:  int(rev.Revision),
 		Created:   rev.Created,
-		CreatedBy: rev.CreatedBy.String(),
+		CreatedBy: nullableUUIDString(rev.CreatedBy),
 		Checksum:  string(rev.Checksum),
 	}
 
 	if rev.Signed.Valid {
 		v.Signed = &rev.Signed.Time
 	}
-	if rev.SignedBy != NilUUID {
-		u := rev.SignedBy.String()
+	if rev.SignedBy.Valid {
+		u := rev.SignedBy.UUID.String()
 		v.SignedBy = &u
 	}
 
@@ -220,7 +220,7 @@ func (s *ProgramService) FindAllCodeRevisions(ctx context.Context, id uuid.UUID)
 		rev := &rest.CodeRevision{
 			Revision:  int(t.Revision),
 			Created:   t.Created,
-			CreatedBy: t.CreatedBy.String(),
+			CreatedBy: nullableUUIDString(t.CreatedBy),
 			Checksum:  string(t.Checksum),
 		}
 
@@ -228,8 +228,8 @@ func (s *ProgramService) FindAllCodeRevisions(ctx context.Context, id uuid.UUID)
 			v := t.Signed.Time
 			rev.Signed = &v
 		}
-		if t.SignedBy != NilUUID {
-			u := t.SignedBy.String()
+		if t.SignedBy.Valid {
+			u := t.SignedBy.UUID.String()
 			rev.SignedBy = &u
 		}
 
@@ -427,7 +427,7 @@ func (s *ProgramService) SignCodeRevision(ctx context.Context, p SignCodeRevisio
 	count, err := s.q.SignProgramCodeRevision(ctx, postgres.SignProgramCodeRevisionParams{
 		ProgramUuid: p.ProgramUuid,
 		Revision:    int32(p.Revision),
-		SignedBy:    p.SignedBy,
+		SignedBy:    nullableUUIDValue(p.SignedBy),
 	})
 	if err != nil {
 		return 0, err

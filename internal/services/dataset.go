@@ -85,13 +85,13 @@ func (svc *DatasetService) AddDataset(ctx context.Context, p *AddDatasetParams) 
 		Size:      int64(dataset.Size),
 		Created:   dataset.Created,
 		Updated:   dataset.Updated,
-		CreatedBy: dataset.CreatedBy.String(),
-		UpdatedBy: dataset.UpdatedBy.String(),
+		CreatedBy: nullableUUIDString(dataset.CreatedBy),
+		UpdatedBy: nullableUUIDString(dataset.UpdatedBy),
 		Tags:      dataset.Tags,
 	}
 
-	if dataset.BelongsTo != NilUUID {
-		belongsTo := dataset.BelongsTo.String()
+	if dataset.BelongsTo.Valid {
+		belongsTo := dataset.BelongsTo.UUID.String()
 		v.ThingUuid = &belongsTo
 	}
 
@@ -112,13 +112,13 @@ func (svc *DatasetService) FindDatasetByUuid(ctx context.Context, id uuid.UUID) 
 		Size:      int64(dataset.Size),
 		Created:   dataset.Created,
 		Updated:   dataset.Updated,
-		CreatedBy: dataset.CreatedBy.String(),
-		UpdatedBy: dataset.UpdatedBy.String(),
+		CreatedBy: nullableUUIDString(dataset.CreatedBy),
+		UpdatedBy: nullableUUIDString(dataset.UpdatedBy),
 		Tags:      dataset.Tags,
 	}
 
-	if dataset.BelongsTo != NilUUID {
-		belongsTo := dataset.BelongsTo.String()
+	if dataset.BelongsTo.Valid {
+		belongsTo := dataset.BelongsTo.UUID.String()
 		v.ThingUuid = &belongsTo
 	}
 
@@ -128,7 +128,7 @@ func (svc *DatasetService) FindDatasetByUuid(ctx context.Context, id uuid.UUID) 
 func (svc *DatasetService) FindByThing(ctx context.Context, id uuid.UUID) ([]*rest.Dataset, error) {
 	datasets := make([]*rest.Dataset, 0)
 
-	datasetsList, err := svc.q.FindDatasetByThing(ctx, id)
+	datasetsList, err := svc.q.FindDatasetByThing(ctx, nullableUUIDValue(id))
 	if err != nil {
 		return nil, err
 	}
@@ -142,13 +142,13 @@ func (svc *DatasetService) FindByThing(ctx context.Context, id uuid.UUID) ([]*re
 			Size:      int64(t.Size),
 			Created:   t.Created,
 			Updated:   t.Updated,
-			CreatedBy: t.CreatedBy.String(),
-			UpdatedBy: t.UpdatedBy.String(),
+			CreatedBy: nullableUUIDString(t.CreatedBy),
+			UpdatedBy: nullableUUIDString(t.UpdatedBy),
 			Tags:      t.Tags,
 		}
 
-		if t.BelongsTo != NilUUID {
-			v := t.BelongsTo.String()
+		if t.BelongsTo.Valid {
+			v := t.BelongsTo.UUID.String()
 			dataset.ThingUuid = &v
 		}
 
@@ -186,13 +186,13 @@ func (svc *DatasetService) FindAll(ctx context.Context, p FindAllParams) ([]*res
 			Size:      int64(t.Size),
 			Created:   t.Created,
 			Updated:   t.Updated,
-			CreatedBy: t.CreatedBy.String(),
-			UpdatedBy: t.UpdatedBy.String(),
+			CreatedBy: nullableUUIDString(t.CreatedBy),
+			UpdatedBy: nullableUUIDString(t.UpdatedBy),
 			Tags:      t.Tags,
 		}
 
-		if t.BelongsTo != NilUUID {
-			v := t.BelongsTo.String()
+		if t.BelongsTo.Valid {
+			v := t.BelongsTo.UUID.String()
 			dataset.ThingUuid = &v
 		}
 
@@ -230,13 +230,13 @@ func (svc *DatasetService) FindByTags(ctx context.Context, p FindByTagsParams) (
 			Size:      int64(t.Size),
 			Created:   t.Created,
 			Updated:   t.Updated,
-			CreatedBy: t.CreatedBy.String(),
-			UpdatedBy: t.UpdatedBy.String(),
+			CreatedBy: nullableUUIDString(t.CreatedBy),
+			UpdatedBy: nullableUUIDString(t.UpdatedBy),
 			Tags:      t.Tags,
 		}
 
-		if t.BelongsTo != NilUUID {
-			v := t.BelongsTo.String()
+		if t.BelongsTo.Valid {
+			v := t.BelongsTo.UUID.String()
 			dataset.ThingUuid = &v
 		}
 
@@ -333,7 +333,7 @@ func (svc *DatasetService) UpdateDatasetByUuid(ctx context.Context, id uuid.UUID
 	if p.ThingUuid != nil {
 		params := postgres.SetDatasetThingByUUIDParams{
 			Uuid:      id,
-			ThingUuid: *p.ThingUuid,
+			ThingUuid: nullableUUID(p.ThingUuid),
 		}
 		c, err := q.SetDatasetThingByUUID(ctx, params)
 		if err != nil {

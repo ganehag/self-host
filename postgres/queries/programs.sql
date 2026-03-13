@@ -64,67 +64,73 @@ VALUES (
 
 -- name: FindPrograms :many
 WITH usr AS (
-	SELECT users.uuid
-	FROM users, user_tokens
-	WHERE user_tokens.user_uuid = users.uuid
-	AND user_tokens.token_hash = sha256(sqlc.arg(token))
+	SELECT user_tokens.user_uuid AS uuid
+	FROM user_tokens
+	WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
 	LIMIT 1
-), policies AS (
-	SELECT group_policies.effect, group_policies.priority, group_policies.resource
-	FROM group_policies, user_groups
-	WHERE user_groups.group_uuid = group_policies.group_uuid
-	AND user_groups.user_uuid = (SELECT uuid FROM usr)
-	AND action = 'read'
+), permitted_programs AS (
+	SELECT *
+	FROM programs
+	WHERE EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'allow'
+		AND ('programs/'||programs.uuid) LIKE group_policies.resource
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'deny'
+		AND ('programs/'||programs.uuid) LIKE group_policies.resource
+	)
+	ORDER BY name
+	LIMIT sqlc.arg(arg_limit)::BIGINT
+	OFFSET sqlc.arg(arg_offset)::BIGINT
 )
 SELECT
 	*
-FROM programs
-WHERE 'programs/'||programs.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'allow')
-)
-EXCEPT
-SELECT
-	*
-FROM programs
-WHERE 'programs/'||programs.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'deny')
-)
-ORDER BY name
-LIMIT sqlc.arg(arg_limit)::BIGINT
-OFFSET sqlc.arg(arg_offset)::BIGINT
-;
+FROM permitted_programs;
 
 -- name: FindProgramsByTags :many
 WITH usr AS (
-	SELECT users.uuid
-	FROM users, user_tokens
-	WHERE user_tokens.user_uuid = users.uuid
-	AND user_tokens.token_hash = sha256(sqlc.arg(token))
+	SELECT user_tokens.user_uuid AS uuid
+	FROM user_tokens
+	WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
 	LIMIT 1
-), policies AS (
-	SELECT group_policies.effect, group_policies.priority, group_policies.resource
-	FROM group_policies, user_groups
-	WHERE user_groups.group_uuid = group_policies.group_uuid
-	AND user_groups.user_uuid = (SELECT uuid FROM usr)
-	AND action = 'read'
+), permitted_programs AS (
+	SELECT *
+	FROM programs
+	WHERE sqlc.arg(tags) && programs.tags
+	AND EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'allow'
+		AND ('programs/'||programs.uuid) LIKE group_policies.resource
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'deny'
+		AND ('programs/'||programs.uuid) LIKE group_policies.resource
+	)
+	ORDER BY name
+	LIMIT sqlc.arg(arg_limit)::BIGINT
+	OFFSET sqlc.arg(arg_offset)::BIGINT
 )
 SELECT *
-FROM programs
-WHERE 'programs/'||programs.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'allow')
-)
-AND sqlc.arg(tags) && programs.tags
-EXCEPT
-SELECT *
-FROM programs
-WHERE 'programs/'||programs.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'deny')
-)
-AND sqlc.arg(tags) && programs.tags
-ORDER BY name
-LIMIT sqlc.arg(arg_limit)::BIGINT
-OFFSET sqlc.arg(arg_offset)::BIGINT
-;
+FROM permitted_programs;
 
 -- name: FindAllRoutineRevisions :many
 WITH p AS (
