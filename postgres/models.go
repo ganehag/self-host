@@ -2184,6 +2184,15 @@ type Tsdata99 struct {
 	CreatedBy uuid.NullUUID
 }
 
+type TsdataHourlyRollup struct {
+	TsUuid      uuid.UUID
+	BucketTs    time.Time
+	SampleCount int64
+	SampleSum   float64
+	SampleMin   float64
+	SampleMax   float64
+}
+
 type Tsdatum struct {
 	TsUuid    uuid.UUID
 	Value     float64

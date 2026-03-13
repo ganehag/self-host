@@ -457,6 +457,7 @@ type QuerySingleSourceDataParams struct {
 	Aggregate   string
 	Precision   string
 	Timezone    string
+	UseRollups  bool
 	MaxPoints   int
 }
 
@@ -495,15 +496,7 @@ func (svc *TimeseriesService) QuerySingleSourceData(ctx context.Context, p Query
 	}
 
 	if shouldAggregateData(p.Aggregate, p.Precision) {
-		dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
-			TsUuids: []uuid.UUID{p.Uuid},
-			Start:   p.Start,
-			Stop:    p.End,
-		})
-		if err != nil {
-			return nil, err
-		}
-		result, err := aggregateSingleSourceRows(dataList, p, tzloc, fromUnit, toUnit)
+		result, err := svc.querySingleSourceAggregatedData(ctx, p, tzloc, fromUnit, toUnit)
 		if err != nil {
 			return nil, err
 		}
@@ -572,6 +565,7 @@ type QueryMultiSourceDataParams struct {
 	Aggregate          string
 	Precision          string
 	Timezone           string
+	UseRollups         bool
 	MaxPointsPerSeries int
 	MaxTotalPoints     int
 }
@@ -582,22 +576,21 @@ func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryM
 		return nil, ie.NewInvalidRequestError(err)
 	}
 
-	dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
-		TsUuids: p.Uuids,
-		Start:   p.Start,
-		Stop:    p.End,
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	mapping := make(map[uuid.UUID][]rest.TsRow, len(p.Uuids))
 	if shouldAggregateData(p.Aggregate, p.Precision) {
-		mapping, err = aggregateMultiSourceRows(dataList, p, tzloc)
+		mapping, err = svc.queryMultiSourceAggregatedData(ctx, p, tzloc)
 		if err != nil {
 			return nil, err
 		}
 	} else {
+		dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+			TsUuids: p.Uuids,
+			Start:   p.Start,
+			Stop:    p.End,
+		})
+		if err != nil {
+			return nil, err
+		}
 		if err := appendRawMultiSourceRows(mapping, dataList, p, tzloc); err != nil {
 			return nil, err
 		}
@@ -623,6 +616,80 @@ func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryM
 	}
 
 	return tsResult, nil
+}
+
+func (svc *TimeseriesService) querySingleSourceAggregatedData(ctx context.Context, p QuerySingleSourceDataParams, tzloc *time.Location, fromUnit, toUnit units.Unit) ([]*rest.TsRow, error) {
+	if canUseHourlyRollups(p.UseRollups, p.Timezone, p.Precision) {
+		rawRows, rollupRows, err := svc.loadAggregateSources(ctx, []uuid.UUID{p.Uuid}, p.Start, p.End)
+		if err != nil {
+			return nil, err
+		}
+		return aggregateSingleSourceFromSources(rawRows, rollupRows, p, tzloc, fromUnit, toUnit)
+	}
+
+	dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+		TsUuids: []uuid.UUID{p.Uuid},
+		Start:   p.Start,
+		Stop:    p.End,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return aggregateSingleSourceRows(dataList, p, tzloc, fromUnit, toUnit)
+}
+
+func (svc *TimeseriesService) queryMultiSourceAggregatedData(ctx context.Context, p QueryMultiSourceDataParams, tzloc *time.Location) (map[uuid.UUID][]rest.TsRow, error) {
+	if canUseHourlyRollups(p.UseRollups, p.Timezone, p.Precision) {
+		rawRows, rollupRows, err := svc.loadAggregateSources(ctx, p.Uuids, p.Start, p.End)
+		if err != nil {
+			return nil, err
+		}
+		return aggregateMultiSourceFromSources(rawRows, rollupRows, p, tzloc)
+	}
+
+	dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+		TsUuids: p.Uuids,
+		Start:   p.Start,
+		Stop:    p.End,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return aggregateMultiSourceRows(dataList, p, tzloc)
+}
+
+func (svc *TimeseriesService) loadAggregateSources(ctx context.Context, uuids []uuid.UUID, start, end time.Time) ([]postgres.GetTsDataRangeRow, []postgres.TsdataHourlyRollup, error) {
+	rollupRange, rawRanges := splitHourlyRollupRanges(start, end)
+
+	rawRows := make([]postgres.GetTsDataRangeRow, 0)
+	for _, rawRange := range rawRanges {
+		rows, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+			TsUuids: uuids,
+			Start:   rawRange.Start,
+			Stop:    rawRange.Stop,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		rawRows = append(rawRows, rows...)
+	}
+
+	if rollupRange == nil {
+		return rawRows, nil, nil
+	}
+
+	rollupRows, err := svc.q.GetTsHourlyRollupRange(ctx, postgres.GetTsHourlyRollupRangeParams{
+		TsUuids: uuids,
+		Start:   rollupRange.Start,
+		Stop:    rollupRange.Stop,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return rawRows, rollupRows, nil
 }
 
 func shouldAggregateData(aggregate, precision string) bool {
@@ -738,6 +805,29 @@ func aggregateSingleSourceRows(rows []postgres.GetTsDataRangeRow, p QuerySingleS
 	return result, nil
 }
 
+func aggregateSingleSourceFromSources(rawRows []postgres.GetTsDataRangeRow, rollupRows []postgres.TsdataHourlyRollup, p QuerySingleSourceDataParams, tzloc *time.Location, fromUnit, toUnit units.Unit) ([]*rest.TsRow, error) {
+	buckets := make(map[time.Time]*aggregateBucket, len(rawRows)+len(rollupRows))
+	keys := make([]time.Time, 0, len(rawRows)+len(rollupRows))
+
+	for _, item := range rawRows {
+		bucketTs, err := truncateTime(item.Ts, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+		accumulateAggregateBucket(buckets, &keys, bucketTs, 1, item.Value, item.Value, item.Value)
+	}
+
+	for _, item := range rollupRows {
+		bucketTs, err := truncateTime(item.BucketTs, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+		accumulateAggregateBucket(buckets, &keys, bucketTs, item.SampleCount, item.SampleSum, item.SampleMin, item.SampleMax)
+	}
+
+	return buildSingleSourceAggregateResult(buckets, keys, p, tzloc, fromUnit, toUnit)
+}
+
 func appendRawMultiSourceRows(mapping map[uuid.UUID][]rest.TsRow, rows []postgres.GetTsDataRangeRow, p QueryMultiSourceDataParams, tzloc *time.Location) error {
 	totalPoints := 0
 	for _, item := range rows {
@@ -845,6 +935,151 @@ func aggregateMultiSourceRows(rows []postgres.GetTsDataRangeRow, p QueryMultiSou
 	return mapping, nil
 }
 
+func aggregateMultiSourceFromSources(rawRows []postgres.GetTsDataRangeRow, rollupRows []postgres.TsdataHourlyRollup, p QueryMultiSourceDataParams, tzloc *time.Location) (map[uuid.UUID][]rest.TsRow, error) {
+	mapping := make(map[uuid.UUID][]rest.TsRow, len(p.Uuids))
+	bucketsBySeries := make(map[uuid.UUID]map[time.Time]*aggregateBucket, len(p.Uuids))
+	keysBySeries := make(map[uuid.UUID][]time.Time, len(p.Uuids))
+
+	for _, item := range rawRows {
+		bucketTs, err := truncateTime(item.Ts, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+		accumulateSeriesAggregateBucket(bucketsBySeries, keysBySeries, item.TsUuid, bucketTs, 1, item.Value, item.Value, item.Value)
+	}
+
+	for _, item := range rollupRows {
+		bucketTs, err := truncateTime(item.BucketTs, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+		accumulateSeriesAggregateBucket(bucketsBySeries, keysBySeries, item.TsUuid, bucketTs, item.SampleCount, item.SampleSum, item.SampleMin, item.SampleMax)
+	}
+
+	totalPoints := 0
+	for seriesID, keys := range keysBySeries {
+		sort.Slice(keys, func(i, j int) bool {
+			return keys[i].Before(keys[j])
+		})
+
+		rows := make([]rest.TsRow, 0, len(keys))
+		for _, key := range keys {
+			value, err := aggregateBucketValue(bucketsBySeries[seriesID][key], p.Aggregate)
+			if err != nil {
+				return nil, err
+			}
+
+			f := float32(value)
+			if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+				continue
+			}
+
+			rows = append(rows, rest.TsRow{
+				V:  f,
+				Ts: key.In(tzloc),
+			})
+		}
+
+		if len(rows) > 0 {
+			totalPoints += len(rows)
+			if err := validateMultiSeriesLimits(len(rows), totalPoints, p); err != nil {
+				return nil, err
+			}
+			mapping[seriesID] = rows
+		}
+	}
+
+	return mapping, nil
+}
+
+func buildSingleSourceAggregateResult(buckets map[time.Time]*aggregateBucket, keys []time.Time, p QuerySingleSourceDataParams, tzloc *time.Location, fromUnit, toUnit units.Unit) ([]*rest.TsRow, error) {
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].Before(keys[j])
+	})
+
+	result := make([]*rest.TsRow, 0, len(keys))
+	for _, key := range keys {
+		bucket := buckets[key]
+		value, err := aggregateBucketValue(bucket, p.Aggregate)
+		if err != nil {
+			return nil, err
+		}
+
+		var f float32
+		if p.Unit != nil {
+			v := units.NewValue(value, fromUnit)
+			conv, err := v.Convert(toUnit)
+			if err != nil {
+				return nil, ie.ErrorInvalidUnitConversion
+			}
+			f = float32(conv.Float())
+		} else {
+			f = float32(value)
+		}
+
+		if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+			continue
+		}
+
+		result = append(result, &rest.TsRow{
+			V:  f,
+			Ts: bucket.ts.In(tzloc),
+		})
+	}
+
+	return result, nil
+}
+
+func accumulateAggregateBucket(buckets map[time.Time]*aggregateBucket, keys *[]time.Time, bucketTs time.Time, count int64, sum, min, max float64) {
+	bucket := buckets[bucketTs]
+	if bucket == nil {
+		bucket = &aggregateBucket{
+			ts:  bucketTs,
+			min: min,
+			max: max,
+		}
+		buckets[bucketTs] = bucket
+		*keys = append(*keys, bucketTs)
+	}
+
+	bucket.count += count
+	bucket.sum += sum
+	if min < bucket.min {
+		bucket.min = min
+	}
+	if max > bucket.max {
+		bucket.max = max
+	}
+}
+
+func accumulateSeriesAggregateBucket(bucketsBySeries map[uuid.UUID]map[time.Time]*aggregateBucket, keysBySeries map[uuid.UUID][]time.Time, seriesID uuid.UUID, bucketTs time.Time, count int64, sum, min, max float64) {
+	seriesBuckets := bucketsBySeries[seriesID]
+	if seriesBuckets == nil {
+		seriesBuckets = make(map[time.Time]*aggregateBucket)
+		bucketsBySeries[seriesID] = seriesBuckets
+	}
+
+	bucket := seriesBuckets[bucketTs]
+	if bucket == nil {
+		bucket = &aggregateBucket{
+			ts:  bucketTs,
+			min: min,
+			max: max,
+		}
+		seriesBuckets[bucketTs] = bucket
+		keysBySeries[seriesID] = append(keysBySeries[seriesID], bucketTs)
+	}
+
+	bucket.count += count
+	bucket.sum += sum
+	if min < bucket.min {
+		bucket.min = min
+	}
+	if max > bucket.max {
+		bucket.max = max
+	}
+}
+
 func validateSingleSeriesPointLimit(points, maxPoints int) error {
 	if maxPoints > 0 && points > maxPoints {
 		return ie.NewHTTPError(nil, http.StatusRequestEntityTooLarge, fmt.Sprintf("timeseries query returned %d points, limit is %d", points, maxPoints))
@@ -880,6 +1115,62 @@ func aggregateBucketValue(bucket *aggregateBucket, aggregate string) (float64, e
 	default:
 		return 0, ie.NewInvalidRequestError(fmt.Errorf("unsupported aggregate %q", aggregate))
 	}
+}
+
+type timeRange struct {
+	Start time.Time
+	Stop  time.Time
+}
+
+func canUseHourlyRollups(enabled bool, timezone, precision string) bool {
+	if enabled == false || timezone != "UTC" {
+		return false
+	}
+
+	switch precision {
+	case "hour", "day", "week", "month", "year", "decade", "century", "millennia":
+		return true
+	default:
+		return false
+	}
+}
+
+func splitHourlyRollupRanges(start, end time.Time) (*timeRange, []timeRange) {
+	if end.Before(start) {
+		return nil, nil
+	}
+
+	firstFullHour := start.Truncate(time.Hour)
+	if firstFullHour.Before(start) {
+		firstFullHour = firstFullHour.Add(time.Hour)
+	}
+
+	lastFullHour := end.Truncate(time.Hour)
+	if lastFullHour.Add(time.Hour).After(end.Add(time.Microsecond)) {
+		lastFullHour = lastFullHour.Add(-time.Hour)
+	}
+
+	if lastFullHour.Before(firstFullHour) {
+		return nil, []timeRange{{Start: start, Stop: end}}
+	}
+
+	rawRanges := make([]timeRange, 0, 2)
+	if start.Before(firstFullHour) {
+		rawRanges = append(rawRanges, timeRange{
+			Start: start,
+			Stop:  firstFullHour.Add(-time.Microsecond),
+		})
+	}
+
+	rightStart := lastFullHour.Add(time.Hour)
+	if rightStart.Before(end) || rightStart.Equal(end) {
+		rawRanges = append(rawRanges, timeRange{
+			Start: rightStart,
+			Stop:  end,
+		})
+	}
+
+	return &timeRange{Start: firstFullHour, Stop: lastFullHour}, rawRanges
 }
 
 func truncateTime(ts time.Time, precision string, loc *time.Location) (time.Time, error) {

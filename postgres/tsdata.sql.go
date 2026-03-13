@@ -216,3 +216,53 @@ func (q *Queries) GetTsDataRangeAgg(ctx context.Context, arg GetTsDataRangeAggPa
 	}
 	return items, nil
 }
+
+const getTsHourlyRollupRange = `-- name: GetTsHourlyRollupRange :many
+SELECT
+	ts_uuid,
+	bucket_ts,
+	sample_count,
+	sample_sum,
+	sample_min,
+	sample_max
+FROM tsdata_hourly_rollups
+WHERE ts_uuid = ANY($1::uuid[])
+AND bucket_ts BETWEEN $2 AND $3
+ORDER BY ts_uuid ASC, bucket_ts ASC
+`
+
+type GetTsHourlyRollupRangeParams struct {
+	TsUuids []uuid.UUID
+	Start   time.Time
+	Stop    time.Time
+}
+
+func (q *Queries) GetTsHourlyRollupRange(ctx context.Context, arg GetTsHourlyRollupRangeParams) ([]TsdataHourlyRollup, error) {
+	rows, err := q.query(ctx, q.getTsHourlyRollupRangeStmt, getTsHourlyRollupRange, pq.Array(arg.TsUuids), arg.Start, arg.Stop)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TsdataHourlyRollup{}
+	for rows.Next() {
+		var i TsdataHourlyRollup
+		if err := rows.Scan(
+			&i.TsUuid,
+			&i.BucketTs,
+			&i.SampleCount,
+			&i.SampleSum,
+			&i.SampleMin,
+			&i.SampleMax,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

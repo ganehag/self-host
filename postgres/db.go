@@ -270,6 +270,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getTsDataRangeAggStmt, err = db.PrepareContext(ctx, getTsDataRangeAgg); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTsDataRangeAgg: %w", err)
 	}
+	if q.getTsHourlyRollupRangeStmt, err = db.PrepareContext(ctx, getTsHourlyRollupRange); err != nil {
+		return nil, fmt.Errorf("error preparing query GetTsHourlyRollupRange: %w", err)
+	}
 	if q.getUnitFromTimeseriesStmt, err = db.PrepareContext(ctx, getUnitFromTimeseries); err != nil {
 		return nil, fmt.Errorf("error preparing query GetUnitFromTimeseries: %w", err)
 	}
@@ -802,6 +805,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getTsDataRangeAggStmt: %w", cerr)
 		}
 	}
+	if q.getTsHourlyRollupRangeStmt != nil {
+		if cerr := q.getTsHourlyRollupRangeStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getTsHourlyRollupRangeStmt: %w", cerr)
+		}
+	}
 	if q.getUnitFromTimeseriesStmt != nil {
 		if cerr := q.getUnitFromTimeseriesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getUnitFromTimeseriesStmt: %w", cerr)
@@ -1118,6 +1126,7 @@ type Queries struct {
 	getTimeseriesByUUIDStmt            *sql.Stmt
 	getTsDataRangeStmt                 *sql.Stmt
 	getTsDataRangeAggStmt              *sql.Stmt
+	getTsHourlyRollupRangeStmt         *sql.Stmt
 	getUnitFromTimeseriesStmt          *sql.Stmt
 	getUserUuidFromTokenStmt           *sql.Stmt
 	removeUserFromAllGroupsStmt        *sql.Stmt
@@ -1245,6 +1254,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getTimeseriesByUUIDStmt:            q.getTimeseriesByUUIDStmt,
 		getTsDataRangeStmt:                 q.getTsDataRangeStmt,
 		getTsDataRangeAggStmt:              q.getTsDataRangeAggStmt,
+		getTsHourlyRollupRangeStmt:         q.getTsHourlyRollupRangeStmt,
 		getUnitFromTimeseriesStmt:          q.getUnitFromTimeseriesStmt,
 		getUserUuidFromTokenStmt:           q.getUserUuidFromTokenStmt,
 		removeUserFromAllGroupsStmt:        q.removeUserFromAllGroupsStmt,

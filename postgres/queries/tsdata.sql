@@ -6,6 +6,19 @@ FROM tsdata
 WHERE ts_uuid = ANY(sqlc.arg(ts_uuids)::uuid[])
 AND ts BETWEEN sqlc.arg(start) AND sqlc.arg(stop);
 
+-- name: GetTsHourlyRollupRange :many
+SELECT
+	ts_uuid,
+	bucket_ts,
+	sample_count,
+	sample_sum,
+	sample_min,
+	sample_max
+FROM tsdata_hourly_rollups
+WHERE ts_uuid = ANY(sqlc.arg(ts_uuids)::uuid[])
+AND bucket_ts BETWEEN sqlc.arg(start) AND sqlc.arg(stop)
+ORDER BY ts_uuid ASC, bucket_ts ASC;
+
 -- name: GetTsDataRangeAgg :many
 WITH tsdata_trunc AS (
 	SELECT

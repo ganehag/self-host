@@ -170,6 +170,7 @@ func (ra *RestApi) QueryTimeseriesForData(w http.ResponseWriter, r *http.Request
 		GreaterOrEq: (*float32)(p.Ge),
 		LessOrEq:    (*float32)(p.Le),
 		Unit:        (*string)(p.Unit),
+		UseRollups:  viper.GetBool("timeseries_rollups.enabled"),
 		MaxPoints:   viper.GetInt("timeseries_queries.max_points_per_series"),
 	}
 

@@ -96,6 +96,7 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 		Aggregate:          aggregate,
 		Precision:          precision,
 		Timezone:           timezone,
+		UseRollups:         viper.GetBool("timeseries_rollups.enabled"),
 		MaxPointsPerSeries: viper.GetInt("timeseries_queries.max_points_per_series"),
 		MaxTotalPoints:     viper.GetInt("timeseries_queries.max_total_points"),
 	}

@@ -37,6 +37,7 @@ func initConfig() {
 	viper.SetDefault("db_pool.max_idle_conns", 10)
 	viper.SetDefault("db_pool.conn_max_lifetime", 30*time.Minute)
 	viper.SetDefault("db_pool.conn_max_idle_time", 5*time.Minute)
+	viper.SetDefault("timeseries_rollups.enabled", true)
 	viper.SetDefault("timeseries_queries.max_series", 32)
 	viper.SetDefault("timeseries_queries.max_points_per_series", 10000)
 	viper.SetDefault("timeseries_queries.max_total_points", 100000)
