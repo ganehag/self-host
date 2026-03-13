@@ -30,6 +30,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.addUserToGroupStmt, err = db.PrepareContext(ctx, addUserToGroup); err != nil {
 		return nil, fmt.Errorf("error preparing query AddUserToGroup: %w", err)
 	}
+	if q.addUserToGroupsStmt, err = db.PrepareContext(ctx, addUserToGroups); err != nil {
+		return nil, fmt.Errorf("error preparing query AddUserToGroups: %w", err)
+	}
 	if q.checkUserTokenHasAccessStmt, err = db.PrepareContext(ctx, checkUserTokenHasAccess); err != nil {
 		return nil, fmt.Errorf("error preparing query CheckUserTokenHasAccess: %w", err)
 	}
@@ -215,6 +218,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.findUserByUUIDStmt, err = db.PrepareContext(ctx, findUserByUUID); err != nil {
 		return nil, fmt.Errorf("error preparing query FindUserByUUID: %w", err)
+	}
+	if q.findUserWithGroupsByTokenStmt, err = db.PrepareContext(ctx, findUserWithGroupsByToken); err != nil {
+		return nil, fmt.Errorf("error preparing query FindUserWithGroupsByToken: %w", err)
 	}
 	if q.findUserWithGroupsByUUIDStmt, err = db.PrepareContext(ctx, findUserWithGroupsByUUID); err != nil {
 		return nil, fmt.Errorf("error preparing query FindUserWithGroupsByUUID: %w", err)
@@ -406,6 +412,11 @@ func (q *Queries) Close() error {
 	if q.addUserToGroupStmt != nil {
 		if cerr := q.addUserToGroupStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing addUserToGroupStmt: %w", cerr)
+		}
+	}
+	if q.addUserToGroupsStmt != nil {
+		if cerr := q.addUserToGroupsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing addUserToGroupsStmt: %w", cerr)
 		}
 	}
 	if q.checkUserTokenHasAccessStmt != nil {
@@ -716,6 +727,11 @@ func (q *Queries) Close() error {
 	if q.findUserByUUIDStmt != nil {
 		if cerr := q.findUserByUUIDStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing findUserByUUIDStmt: %w", cerr)
+		}
+	}
+	if q.findUserWithGroupsByTokenStmt != nil {
+		if cerr := q.findUserWithGroupsByTokenStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing findUserWithGroupsByTokenStmt: %w", cerr)
 		}
 	}
 	if q.findUserWithGroupsByUUIDStmt != nil {
@@ -1054,6 +1070,7 @@ type Queries struct {
 	tx                                 *sql.Tx
 	addTokenToUserStmt                 *sql.Stmt
 	addUserToGroupStmt                 *sql.Stmt
+	addUserToGroupsStmt                *sql.Stmt
 	checkUserTokenHasAccessStmt        *sql.Stmt
 	checkUserTokenHasAccessManyStmt    *sql.Stmt
 	countExistingTimeseriesStmt        *sql.Stmt
@@ -1116,6 +1133,7 @@ type Queries struct {
 	findTimeseriesByUUIDStmt           *sql.Stmt
 	findTokensByUserStmt               *sql.Stmt
 	findUserByUUIDStmt                 *sql.Stmt
+	findUserWithGroupsByTokenStmt      *sql.Stmt
 	findUserWithGroupsByUUIDStmt       *sql.Stmt
 	findUsersStmt                      *sql.Stmt
 	getDatasetContentByUUIDStmt        *sql.Stmt
@@ -1183,6 +1201,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		tx:                                 tx,
 		addTokenToUserStmt:                 q.addTokenToUserStmt,
 		addUserToGroupStmt:                 q.addUserToGroupStmt,
+		addUserToGroupsStmt:                q.addUserToGroupsStmt,
 		checkUserTokenHasAccessStmt:        q.checkUserTokenHasAccessStmt,
 		checkUserTokenHasAccessManyStmt:    q.checkUserTokenHasAccessManyStmt,
 		countExistingTimeseriesStmt:        q.countExistingTimeseriesStmt,
@@ -1245,6 +1264,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		findTimeseriesByUUIDStmt:           q.findTimeseriesByUUIDStmt,
 		findTokensByUserStmt:               q.findTokensByUserStmt,
 		findUserByUUIDStmt:                 q.findUserByUUIDStmt,
+		findUserWithGroupsByTokenStmt:      q.findUserWithGroupsByTokenStmt,
 		findUserWithGroupsByUUIDStmt:       q.findUserWithGroupsByUUIDStmt,
 		findUsersStmt:                      q.findUsersStmt,
 		getDatasetContentByUUIDStmt:        q.getDatasetContentByUUIDStmt,

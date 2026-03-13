@@ -32,15 +32,7 @@ func (ra *RestApi) AddTimeSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
-	if ok == false {
-		ie.SendHTTPError(w, ie.ErrorUndefined)
-		return
-	}
-
-	u := services.NewUserService(db)
-
-	createdByUUID, err := u.GetUserUuidFromToken(r.Context(), []byte(domaintoken.Token))
+	createdByUUID, err := ra.GetUserUUID(r)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ErrorUndefined)
 		return
@@ -100,14 +92,7 @@ func (ra *RestApi) AddDataToTimeseries(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
-	if ok == false {
-		ie.SendHTTPError(w, ie.ErrorUndefined)
-		return
-	}
-
-	u := services.NewUserService(db)
-	createdBy, err := u.GetUserUuidFromToken(r.Context(), []byte(domaintoken.Token))
+	createdBy, err := ra.GetUserUUID(r)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ErrorUndefined)
 		return

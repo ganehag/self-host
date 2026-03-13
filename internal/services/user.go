@@ -120,14 +120,20 @@ func (u *UserService) AddRemoveUserToGroups(ctx context.Context, userUUID uuid.U
 		return 0, err
 	}
 
-	for _, groupUUID := range adds {
-		params := postgres.AddUserToGroupParams{
-			UserUuid:  userUUID,
-			GroupUuid: groupUUID,
-		}
-
-		err = q.AddUserToGroup(ctx, params)
+	addedCount := int64(0)
+	if len(adds) > 0 {
+		addedCount, err = q.AddUserToGroups(ctx, postgres.AddUserToGroupsParams{
+			UserUuid:   userUUID,
+			GroupUuids: adds,
+		})
 		if err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+	}
+
+	if count == 0 && addedCount == 0 {
+		if _, err := q.FindUserByUUID(ctx, userUUID); err != nil {
 			tx.Rollback()
 			return 0, err
 		}
@@ -135,7 +141,7 @@ func (u *UserService) AddRemoveUserToGroups(ctx context.Context, userUUID uuid.U
 
 	tx.Commit()
 
-	return count, nil
+	return count + addedCount, nil
 }
 
 func (u *UserService) AddUserToGroups(ctx context.Context, userUUID uuid.UUID, groupUUIDs []uuid.UUID) error {
@@ -147,14 +153,17 @@ func (u *UserService) AddUserToGroups(ctx context.Context, userUUID uuid.UUID, g
 
 	q := u.q.WithTx(tx)
 
-	for _, groupUUID := range groupUUIDs {
-		params := postgres.AddUserToGroupParams{
-			UserUuid:  userUUID,
-			GroupUuid: groupUUID,
-		}
-
-		err = q.AddUserToGroup(ctx, params)
+	if len(groupUUIDs) > 0 {
+		_, err = q.AddUserToGroups(ctx, postgres.AddUserToGroupsParams{
+			UserUuid:   userUUID,
+			GroupUuids: groupUUIDs,
+		})
 		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	} else {
+		if _, err := q.FindUserByUUID(ctx, userUUID); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -171,16 +180,29 @@ func (u *UserService) FindUserByUuid(ctx context.Context, userUUID uuid.UUID) (*
 		return nil, err
 	}
 
+	return userWithGroupsRowToRest(user.Uuid, user.Name, user.Groups), nil
+}
+
+func (u *UserService) FindUserByToken(ctx context.Context, token []byte) (*rest.User, error) {
+	user, err := u.q.FindUserWithGroupsByToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+
+	return userWithGroupsRowToRest(user.Uuid, user.Name, user.Groups), nil
+}
+
+func userWithGroupsRowToRest(id uuid.UUID, name string, groupsJSON string) *rest.User {
 	userGroups := make([]rest.Group, 0)
-	if err := json.Unmarshal([]byte(user.Groups), &userGroups); err != nil {
+	if err := json.Unmarshal([]byte(groupsJSON), &userGroups); err != nil {
 		// FIXME: log error
 	}
 
 	return &rest.User{
-		Uuid:   user.Uuid.String(),
-		Name:   user.Name,
+		Uuid:   id.String(),
+		Name:   name,
 		Groups: userGroups,
-	}, nil
+	}
 }
 
 func (u *UserService) GetUserUuidFromToken(ctx context.Context, token []byte) (uuid.UUID, error) {
@@ -280,14 +302,20 @@ func (u *UserService) SetUserGroups(ctx context.Context, userUUID uuid.UUID, gro
 		return 0, err
 	}
 
-	for _, groupUUID := range groupUUIDs {
-		params := postgres.AddUserToGroupParams{
-			UserUuid:  userUUID,
-			GroupUuid: groupUUID,
-		}
-
-		err = q.AddUserToGroup(ctx, params)
+	addedCount := int64(0)
+	if len(groupUUIDs) > 0 {
+		addedCount, err = q.AddUserToGroups(ctx, postgres.AddUserToGroupsParams{
+			UserUuid:   userUUID,
+			GroupUuids: groupUUIDs,
+		})
 		if err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+	}
+
+	if count == 0 && addedCount == 0 {
+		if _, err := q.FindUserByUUID(ctx, userUUID); err != nil {
 			tx.Rollback()
 			return 0, err
 		}
@@ -295,7 +323,7 @@ func (u *UserService) SetUserGroups(ctx context.Context, userUUID uuid.UUID, gro
 
 	tx.Commit()
 
-	return count, nil
+	return count + addedCount, nil
 }
 
 func (u *UserService) SetUserName(ctx context.Context, userUUID uuid.UUID, name string) (int64, error) {

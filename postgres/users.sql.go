@@ -58,6 +58,27 @@ func (q *Queries) AddUserToGroup(ctx context.Context, arg AddUserToGroupParams) 
 	return err
 }
 
+const addUserToGroups = `-- name: AddUserToGroups :execrows
+INSERT INTO user_groups(user_uuid, group_uuid)
+SELECT users.uuid, input.group_uuid
+FROM users
+INNER JOIN UNNEST($1::uuid[]) AS input(group_uuid) ON TRUE
+WHERE users.uuid = $2
+`
+
+type AddUserToGroupsParams struct {
+	GroupUuids []uuid.UUID
+	UserUuid   uuid.UUID
+}
+
+func (q *Queries) AddUserToGroups(ctx context.Context, arg AddUserToGroupsParams) (int64, error) {
+	result, err := q.exec(ctx, q.addUserToGroupsStmt, addUserToGroups, pq.Array(arg.GroupUuids), arg.UserUuid)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const createUser = `-- name: CreateUser :one
 WITH grp AS (
 	INSERT INTO groups(name)
@@ -212,6 +233,40 @@ func (q *Queries) FindUserByUUID(ctx context.Context, argUuid uuid.UUID) (User, 
 	row := q.queryRow(ctx, q.findUserByUUIDStmt, findUserByUUID, argUuid)
 	var i User
 	err := row.Scan(&i.Uuid, &i.Name, &i.State)
+	return i, err
+}
+
+const findUserWithGroupsByToken = `-- name: FindUserWithGroupsByToken :one
+SELECT
+	users.uuid, users.name, users.state,
+	(COALESCE((
+		SELECT json_agg(json_build_object('uuid', groups.uuid, 'name', groups.name))
+		FROM user_groups
+		INNER JOIN groups ON groups.uuid = user_groups.group_uuid
+		WHERE users.uuid = user_groups.user_uuid
+	), '[]')::text) AS groups
+FROM users
+INNER JOIN user_tokens ON user_tokens.user_uuid = users.uuid
+WHERE user_tokens.token_hash = sha256($1)
+LIMIT 1
+`
+
+type FindUserWithGroupsByTokenRow struct {
+	Uuid   uuid.UUID
+	Name   string
+	State  AccountState
+	Groups string
+}
+
+func (q *Queries) FindUserWithGroupsByToken(ctx context.Context, token []byte) (FindUserWithGroupsByTokenRow, error) {
+	row := q.queryRow(ctx, q.findUserWithGroupsByTokenStmt, findUserWithGroupsByToken, token)
+	var i FindUserWithGroupsByTokenRow
+	err := row.Scan(
+		&i.Uuid,
+		&i.Name,
+		&i.State,
+		&i.Groups,
+	)
 	return i, err
 }
 

@@ -92,13 +92,7 @@ func (ra *RestApi) Whoami(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s := services.NewUserService(db)
-	id, err := s.GetUserUuidFromToken(r.Context(), []byte(domaintoken.Token))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	}
-
-	user, err := s.FindUserByUuid(r.Context(), id)
+	user, err := s.FindUserByToken(r.Context(), []byte(domaintoken.Token))
 	if err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
 		return
@@ -224,13 +218,7 @@ func (ra *RestApi) UpdateUserByUuid(w http.ResponseWriter, r *http.Request, id r
 		return
 	}
 
-	// Check if user exits
 	svc := services.NewUserService(db)
-	_, err = svc.FindUserByUuid(r.Context(), userUUID)
-	if err != nil {
-		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	}
 
 	// We expect a UpdateUser object in the request body.
 	var updUser rest.UpdateUser

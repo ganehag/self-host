@@ -12,6 +12,8 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+
+	"github.com/google/uuid"
 )
 
 // Error struct
@@ -35,4 +37,13 @@ func (ra *RestApi) GetDB(r *http.Request) (*sql.DB, error) {
 		return nil, errors.New("database handle missing from context")
 	}
 	return db, nil
+}
+
+func (ra *RestApi) GetUserUUID(r *http.Request) (uuid.UUID, error) {
+	userUUID, ok := r.Context().Value("user_uuid").(uuid.UUID)
+	if ok == false {
+		return uuid.Nil, errors.New("authenticated user uuid missing from context")
+	}
+
+	return userUUID, nil
 }

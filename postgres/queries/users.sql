@@ -109,6 +109,20 @@ FROM users
 WHERE users.uuid = sqlc.arg(uuid)
 LIMIT 1;
 
+-- name: FindUserWithGroupsByToken :one
+SELECT
+	users.*,
+	(COALESCE((
+		SELECT json_agg(json_build_object('uuid', groups.uuid, 'name', groups.name))
+		FROM user_groups
+		INNER JOIN groups ON groups.uuid = user_groups.group_uuid
+		WHERE users.uuid = user_groups.user_uuid
+	), '[]')::text) AS groups
+FROM users
+INNER JOIN user_tokens ON user_tokens.user_uuid = users.uuid
+WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
+LIMIT 1;
+
 -- name: FindTokensByUser :many
 SELECT uuid, name, created
 FROM user_tokens
@@ -126,6 +140,13 @@ VALUES(
 	sqlc.arg(user_uuid)::uuid,
 	sqlc.arg(group_uuid)::uuid
 );
+
+-- name: AddUserToGroups :execrows
+INSERT INTO user_groups(user_uuid, group_uuid)
+SELECT users.uuid, input.group_uuid
+FROM users
+INNER JOIN UNNEST(sqlc.arg(group_uuids)::uuid[]) AS input(group_uuid) ON TRUE
+WHERE users.uuid = sqlc.arg(user_uuid);
 
 -- name: SetUserName :execrows
 UPDATE users SET name = sqlc.arg(name)

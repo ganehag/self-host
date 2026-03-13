@@ -34,14 +34,11 @@ func (ra *RestApi) AddProgram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
-	if ok == false {
+	createdBy, err := ra.GetUserUUID(r)
+	if err != nil {
 		ie.SendHTTPError(w, ie.ErrorUndefined)
 		return
 	}
-
-	u := services.NewUserService(db)
-	createdBy, err := u.GetUserUuidFromToken(r.Context(), []byte(domaintoken.Token))
 
 	s := services.NewProgramService(db)
 
@@ -258,14 +255,11 @@ func (ra *RestApi) AddProgramCodeRevision(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
-	if ok == false {
+	createdBy, err := ra.GetUserUUID(r)
+	if err != nil {
 		ie.SendHTTPError(w, ie.ErrorUndefined)
 		return
 	}
-
-	u := services.NewUserService(db)
-	createdBy, err := u.GetUserUuidFromToken(r.Context(), []byte(domaintoken.Token))
 
 	maxUploadSize := 1048576
 	contentLength, err := strconv.Atoi(r.Header.Get("Content-Length"))
@@ -396,14 +390,11 @@ func (ra *RestApi) SignProgramCodeRevisions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
-	if ok == false {
+	signedBy, err := ra.GetUserUUID(r)
+	if err != nil {
 		ie.SendHTTPError(w, ie.ErrorUndefined)
 		return
 	}
-
-	u := services.NewUserService(db)
-	signedBy, err := u.GetUserUuidFromToken(r.Context(), []byte(domaintoken.Token))
 
 	s := services.NewProgramService(db)
 	count, err := s.SignCodeRevision(r.Context(), services.SignCodeRevisionParams{

@@ -29,14 +29,11 @@ func (ra *RestApi) AddDatasets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
-	if ok == false {
+	createdBy, err := ra.GetUserUUID(r)
+	if err != nil {
 		ie.SendHTTPError(w, ie.ErrorUndefined)
 		return
 	}
-
-	u := services.NewUserService(db)
-	createdBy, err := u.GetUserUuidFromToken(r.Context(), []byte(domaintoken.Token))
 
 	s := services.NewDatasetService(db)
 

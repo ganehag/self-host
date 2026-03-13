@@ -98,6 +98,26 @@ func PolicyValidator() func(http.Handler) http.Handler {
 			// Store the DB handle in the Context
 			newctx = context.WithValue(newctx, "db", db)
 
+			requiresUserID := false
+			for _, scope := range scopes {
+				splitScope := strings.Split(scope, ":")
+				if len(splitScope) == 2 && splitScope[0] != "read" {
+					requiresUserID = true
+					break
+				}
+			}
+
+			if requiresUserID {
+				userSvc := services.NewUserService(db)
+				userUUID, err := userSvc.GetUserUuidFromToken(newctx, []byte(apiKey))
+				if err != nil {
+					ie.SendHTTPError(w, ie.ParseDBError(err))
+					return
+				}
+
+				newctx = context.WithValue(newctx, "user_uuid", userUUID)
+			}
+
 			next.ServeHTTP(w, r.WithContext(newctx))
 		})
 	}
