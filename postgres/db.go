@@ -186,6 +186,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.findPoliciesByGroupStmt, err = db.PrepareContext(ctx, findPoliciesByGroup); err != nil {
 		return nil, fmt.Errorf("error preparing query FindPoliciesByGroup: %w", err)
 	}
+	if q.findPoliciesByTokenStmt, err = db.PrepareContext(ctx, findPoliciesByToken); err != nil {
+		return nil, fmt.Errorf("error preparing query FindPoliciesByToken: %w", err)
+	}
 	if q.findPoliciesByUserStmt, err = db.PrepareContext(ctx, findPoliciesByUser); err != nil {
 		return nil, fmt.Errorf("error preparing query FindPoliciesByUser: %w", err)
 	}
@@ -659,6 +662,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing findPoliciesByGroupStmt: %w", cerr)
 		}
 	}
+	if q.findPoliciesByTokenStmt != nil {
+		if cerr := q.findPoliciesByTokenStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing findPoliciesByTokenStmt: %w", cerr)
+		}
+	}
 	if q.findPoliciesByUserStmt != nil {
 		if cerr := q.findPoliciesByUserStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing findPoliciesByUserStmt: %w", cerr)
@@ -1082,6 +1090,7 @@ type Queries struct {
 	findGroupsByUserStmt               *sql.Stmt
 	findPoliciesStmt                   *sql.Stmt
 	findPoliciesByGroupStmt            *sql.Stmt
+	findPoliciesByTokenStmt            *sql.Stmt
 	findPoliciesByUserStmt             *sql.Stmt
 	findPolicyByUUIDStmt               *sql.Stmt
 	findProgramByUUIDStmt              *sql.Stmt
@@ -1208,6 +1217,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		findGroupsByUserStmt:               q.findGroupsByUserStmt,
 		findPoliciesStmt:                   q.findPoliciesStmt,
 		findPoliciesByGroupStmt:            q.findPoliciesByGroupStmt,
+		findPoliciesByTokenStmt:            q.findPoliciesByTokenStmt,
 		findPoliciesByUserStmt:             q.findPoliciesByUserStmt,
 		findPolicyByUUIDStmt:               q.findPolicyByUUIDStmt,
 		findProgramByUUIDStmt:              q.findProgramByUUIDStmt,
