@@ -302,25 +302,32 @@ type Alert struct {
 }
 
 type Dataset struct {
-	Uuid      uuid.UUID
-	Name      string
-	Format    string
-	Content   []byte
-	Checksum  []byte
-	Size      int32
-	BelongsTo uuid.NullUUID
-	Created   time.Time
-	Updated   time.Time
-	CreatedBy uuid.NullUUID
-	UpdatedBy uuid.NullUUID
-	Tags      []string
+	Uuid           uuid.UUID
+	Name           string
+	Format         string
+	Content        []byte
+	Checksum       []byte
+	Size           int32
+	BelongsTo      uuid.NullUUID
+	Created        time.Time
+	Updated        time.Time
+	CreatedBy      uuid.NullUUID
+	UpdatedBy      uuid.NullUUID
+	Tags           []string
+	StorageBackend string
+	StorageBucket  sql.NullString
+	StorageKey     sql.NullString
 }
 
 type DatasetUpload struct {
-	UploadID    string
-	DatasetUuid uuid.UUID
-	CreatedBy   uuid.NullUUID
-	Created     time.Time
+	UploadID        string
+	DatasetUuid     uuid.UUID
+	CreatedBy       uuid.NullUUID
+	Created         time.Time
+	StorageBackend  string
+	StorageBucket   sql.NullString
+	StorageKey      sql.NullString
+	BackendUploadID sql.NullString
 }
 
 type DatasetUploadPart struct {
@@ -329,6 +336,7 @@ type DatasetUploadPart struct {
 	Size        int32
 	ChecksumMd5 string
 	Created     time.Time
+	Etag        sql.NullString
 }
 
 type Group struct {

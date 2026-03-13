@@ -1,0 +1,2 @@
+domains:
+  test: postgresql://postgres:mysecretpassword@postgres:5432/selfhost-seaweed?sslmode=disable

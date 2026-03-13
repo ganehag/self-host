@@ -5,17 +5,21 @@ WHERE datasets.uuid = sqlc.arg(uuid);
 
 -- name: CreateDataset :one
 WITH ds AS (
-	INSERT INTO datasets (name, format, content, checksum, size, belongs_to, created_by, updated_by, tags)
+	INSERT INTO datasets (uuid, name, format, content, checksum, size, belongs_to, created_by, updated_by, tags, storage_backend, storage_bucket, storage_key)
 	VALUES(
+		sqlc.arg(uuid)::uuid,
 		sqlc.arg(name)::text,
 		sqlc.arg(format)::text,
 		sqlc.arg(content)::bytea,
-		sha256(sqlc.arg(content)::bytea),
-		length(sqlc.arg(content))::integer,
+		decode(sqlc.arg(checksum)::text, 'hex'),
+		sqlc.arg(size)::integer,
 		NULLIF(sqlc.arg(belongs_to)::uuid, '00000000-0000-0000-0000-000000000000'::uuid),
 		sqlc.arg(created_by)::uuid,
 		sqlc.arg(created_by)::uuid,
-		sqlc.arg(tags)
+		sqlc.arg(tags),
+		sqlc.arg(storage_backend)::text,
+		NULLIF(sqlc.arg(storage_bucket)::text, ''),
+		NULLIF(sqlc.arg(storage_key)::text, '')
 	)
 	RETURNING
 		uuid,
@@ -184,7 +188,13 @@ ORDER BY name
 ;
 
 -- name: GetDatasetContentByUUID :one
-SELECT format, content, encode(checksum, 'hex') AS checksum
+SELECT format, content, encode(checksum, 'hex') AS checksum, size, storage_backend, storage_bucket, storage_key
+FROM datasets
+WHERE datasets.uuid = sqlc.arg(uuid)
+LIMIT 1;
+
+-- name: GetDatasetObjectRefByUUID :one
+SELECT format, encode(checksum, 'hex') AS checksum, size, storage_backend, storage_bucket, storage_key
 FROM datasets
 WHERE datasets.uuid = sqlc.arg(uuid)
 LIMIT 1;
@@ -205,8 +215,24 @@ SET
 		ELSE content
 	END,
 	checksum = CASE
-		WHEN sqlc.arg(set_content)::boolean THEN sha256(sqlc.arg(content)::bytea)
+		WHEN sqlc.arg(set_content)::boolean THEN decode(sqlc.arg(checksum)::text, 'hex')
 		ELSE checksum
+	END,
+	size = CASE
+		WHEN sqlc.arg(set_content)::boolean THEN sqlc.arg(size)::integer
+		ELSE size
+	END,
+	storage_backend = CASE
+		WHEN sqlc.arg(set_content)::boolean THEN sqlc.arg(storage_backend)::text
+		ELSE storage_backend
+	END,
+	storage_bucket = CASE
+		WHEN sqlc.arg(set_content)::boolean THEN NULLIF(sqlc.arg(storage_bucket)::text, '')
+		ELSE storage_bucket
+	END,
+	storage_key = CASE
+		WHEN sqlc.arg(set_content)::boolean THEN NULLIF(sqlc.arg(storage_key)::text, '')
+		ELSE storage_key
 	END,
 	belongs_to = CASE
 		WHEN sqlc.arg(set_thing_uuid)::boolean THEN sqlc.arg(thing_uuid)

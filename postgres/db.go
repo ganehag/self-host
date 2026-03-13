@@ -246,6 +246,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getDatasetContentByUUIDStmt, err = db.PrepareContext(ctx, getDatasetContentByUUID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetDatasetContentByUUID: %w", err)
 	}
+	if q.getDatasetObjectRefByUUIDStmt, err = db.PrepareContext(ctx, getDatasetObjectRefByUUID); err != nil {
+		return nil, fmt.Errorf("error preparing query GetDatasetObjectRefByUUID: %w", err)
+	}
 	if q.getNamedModuleCodeAtHeadStmt, err = db.PrepareContext(ctx, getNamedModuleCodeAtHead); err != nil {
 		return nil, fmt.Errorf("error preparing query GetNamedModuleCodeAtHead: %w", err)
 	}
@@ -765,6 +768,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getDatasetContentByUUIDStmt: %w", cerr)
 		}
 	}
+	if q.getDatasetObjectRefByUUIDStmt != nil {
+		if cerr := q.getDatasetObjectRefByUUIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getDatasetObjectRefByUUIDStmt: %w", cerr)
+		}
+	}
 	if q.getNamedModuleCodeAtHeadStmt != nil {
 		if cerr := q.getNamedModuleCodeAtHeadStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getNamedModuleCodeAtHeadStmt: %w", cerr)
@@ -1118,6 +1126,7 @@ type Queries struct {
 	findUserWithGroupsByUUIDStmt       *sql.Stmt
 	findUsersStmt                      *sql.Stmt
 	getDatasetContentByUUIDStmt        *sql.Stmt
+	getDatasetObjectRefByUUIDStmt      *sql.Stmt
 	getNamedModuleCodeAtHeadStmt       *sql.Stmt
 	getNamedModuleCodeAtRevisionStmt   *sql.Stmt
 	getProgramCodeAtHeadStmt           *sql.Stmt
@@ -1246,6 +1255,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		findUserWithGroupsByUUIDStmt:       q.findUserWithGroupsByUUIDStmt,
 		findUsersStmt:                      q.findUsersStmt,
 		getDatasetContentByUUIDStmt:        q.getDatasetContentByUUIDStmt,
+		getDatasetObjectRefByUUIDStmt:      q.getDatasetObjectRefByUUIDStmt,
 		getNamedModuleCodeAtHeadStmt:       q.getNamedModuleCodeAtHeadStmt,
 		getNamedModuleCodeAtRevisionStmt:   q.getNamedModuleCodeAtRevisionStmt,
 		getProgramCodeAtHeadStmt:           q.getProgramCodeAtHeadStmt,

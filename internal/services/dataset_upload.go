@@ -33,6 +33,8 @@ type DatasetUploadOptions struct {
 	RootDir      string
 	MaxPartSize  int64
 	MaxTotalSize int64
+	Storage      DatasetStorageOptions
+	Store        DatasetObjectStore
 }
 
 type DatasetUploadPart struct {
@@ -67,22 +69,45 @@ func NewDatasetUploadService(db *sql.DB, opt DatasetUploadOptions) *DatasetUploa
 }
 
 func (svc *DatasetUploadService) CreateUpload(ctx context.Context, datasetUUID uuid.UUID, createdBy uuid.UUID) (*DatasetUploadSession, error) {
-	if _, err := svc.q.FindDatasetByUUID(ctx, datasetUUID); err != nil {
-		return nil, err
-	}
-
-	uploadID := uuid.NewString()
-	row, err := svc.q.CreateDatasetUpload(ctx, postgres.CreateDatasetUploadParams{
-		UploadID:    uploadID,
-		DatasetUuid: datasetUUID,
-		CreatedBy:   nullableUUIDValue(createdBy),
-	})
+	ds, err := svc.q.FindDatasetByUUID(ctx, datasetUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := os.MkdirAll(svc.uploadDir(uploadID), 0o700); err != nil {
-		_, _ = svc.q.DeleteDatasetUploadByID(ctx, uploadID)
+	uploadID := uuid.NewString()
+	params := postgres.CreateDatasetUploadParams{
+		UploadID:       uploadID,
+		DatasetUuid:    datasetUUID,
+		CreatedBy:      nullableUUIDValue(createdBy),
+		StorageBackend: DatasetStorageBackendInline,
+	}
+
+	if svc.opt.Store != nil {
+		ref := svc.opt.Storage.UploadRef(datasetUUID.String(), uploadID)
+		backendUploadID, err := svc.opt.Store.CreateMultipartUpload(ctx, ref, ds.Format)
+		if err != nil {
+			return nil, err
+		}
+
+		params.StorageBackend = DatasetStorageBackendS3
+		params.StorageBucket = ref.Bucket
+		params.StorageKey = ref.Key
+		params.BackendUploadID = backendUploadID
+	} else {
+		if err := os.MkdirAll(svc.uploadDir(uploadID), 0o700); err != nil {
+			return nil, err
+		}
+	}
+
+	row, err := svc.q.CreateDatasetUpload(ctx, params)
+	if err != nil {
+		if svc.opt.Store != nil {
+			_ = svc.opt.Store.AbortMultipartUpload(ctx, DatasetObjectRef{
+				Backend: DatasetStorageBackendS3,
+				Bucket:  params.StorageBucket,
+				Key:     params.StorageKey,
+			}, params.BackendUploadID)
+		}
 		return nil, err
 	}
 
@@ -102,52 +127,45 @@ func (svc *DatasetUploadService) UploadPart(ctx context.Context, datasetUUID uui
 		return ie.ErrorNotFound
 	}
 
+	body, actualMD5, err := svc.readUploadBody(content, expectedMD5)
+	if err != nil {
+		return err
+	}
+
+	if svc.opt.Store != nil && upload.StorageBackend == DatasetStorageBackendS3 {
+		etag, size, err := svc.opt.Store.UploadPart(ctx, DatasetObjectRef{
+			Backend: upload.StorageBackend,
+			Bucket:  nullableSQLString(upload.StorageBucket),
+			Key:     nullableSQLString(upload.StorageKey),
+		}, nullableSQLString(upload.BackendUploadID), int32(partNumber), body, actualMD5)
+		if err != nil {
+			return err
+		}
+
+		_, err = svc.q.UpsertDatasetUploadPart(ctx, postgres.UpsertDatasetUploadPartParams{
+			UploadID:    uploadID,
+			PartNumber:  int32(partNumber),
+			Size:        int32(size),
+			ChecksumMd5: actualMD5,
+			Etag:        etag,
+		})
+		return err
+	}
+
 	partPath := svc.partPath(uploadID, partNumber)
 	if err := os.MkdirAll(filepath.Dir(partPath), 0o700); err != nil {
 		return err
 	}
-
-	tmp, err := os.CreateTemp(filepath.Dir(partPath), "part-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer func() {
-		tmp.Close()
-		_ = os.Remove(tmpPath)
-	}()
-
-	hasher := md5.New()
-	reader := content
-	if svc.opt.MaxPartSize > 0 {
-		reader = io.LimitReader(content, svc.opt.MaxPartSize+1)
-	}
-
-	written, err := io.Copy(io.MultiWriter(tmp, hasher), reader)
-	if err != nil {
-		return err
-	}
-	if svc.opt.MaxPartSize > 0 && written > svc.opt.MaxPartSize {
-		return ie.NewBadRequestError(fmt.Errorf("PartTooLarge"))
-	}
-
-	actualMD5 := hex.EncodeToString(hasher.Sum(nil))
-	if !strings.EqualFold(actualMD5, expectedMD5) {
-		return ie.NewBadRequestError(fmt.Errorf("BadDigest"))
-	}
-
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpPath, partPath); err != nil {
+	if err := os.WriteFile(partPath, body, 0o600); err != nil {
 		return err
 	}
 
 	_, err = svc.q.UpsertDatasetUploadPart(ctx, postgres.UpsertDatasetUploadPartParams{
 		UploadID:    uploadID,
 		PartNumber:  int32(partNumber),
-		Size:        int32(written),
-		ChecksumMd5: strings.ToLower(actualMD5),
+		Size:        int32(len(body)),
+		ChecksumMd5: actualMD5,
+		Etag:        "",
 	})
 	return err
 }
@@ -196,6 +214,14 @@ func (svc *DatasetUploadService) CancelUpload(ctx context.Context, datasetUUID u
 		return ie.ErrorNotFound
 	}
 
+	if svc.opt.Store != nil && upload.StorageBackend == DatasetStorageBackendS3 {
+		return svc.opt.Store.AbortMultipartUpload(ctx, DatasetObjectRef{
+			Backend: upload.StorageBackend,
+			Bucket:  nullableSQLString(upload.StorageBucket),
+			Key:     nullableSQLString(upload.StorageKey),
+		}, nullableSQLString(upload.BackendUploadID))
+	}
+
 	return os.RemoveAll(svc.uploadDir(uploadID))
 }
 
@@ -206,6 +232,11 @@ func (svc *DatasetUploadService) AssembleUpload(ctx context.Context, datasetUUID
 	}
 	if upload.DatasetUuid != datasetUUID {
 		return ie.ErrorNotFound
+	}
+
+	ds, err := svc.q.FindDatasetByUUID(ctx, datasetUUID)
+	if err != nil {
+		return err
 	}
 
 	parts, err := svc.q.FindDatasetUploadParts(ctx, uploadID)
@@ -226,56 +257,97 @@ func (svc *DatasetUploadService) AssembleUpload(ctx context.Context, datasetUUID
 		}
 	}
 
-	assembledFile, err := os.CreateTemp(svc.uploadDir(uploadID), "assembled-*.bin")
-	if err != nil {
-		return err
-	}
-	assembledPath := assembledFile.Name()
-	defer func() {
-		assembledFile.Close()
-		_ = os.Remove(assembledPath)
-	}()
-
-	hasher := md5.New()
-	var totalSize int64
-	for _, part := range parts {
-		partFile, err := os.Open(svc.partPath(uploadID, int(part.PartNumber)))
-		if err != nil {
-			if os.IsNotExist(err) {
+	var (
+		metadata      DatasetStorageMetadata
+		inlineContent = []byte{}
+	)
+	if svc.opt.Store != nil && upload.StorageBackend == DatasetStorageBackendS3 {
+		completedParts := make([]DatasetMultipartPart, 0, len(parts))
+		for _, part := range parts {
+			if !part.Etag.Valid || part.Etag.String == "" {
 				return ie.NewBadRequestError(fmt.Errorf("InvalidPart"))
 			}
+			completedParts = append(completedParts, DatasetMultipartPart{
+				PartNumber: part.PartNumber,
+				ETag:       part.Etag.String,
+			})
+		}
+
+		metadata, err = svc.opt.Store.CompleteMultipartUpload(ctx, DatasetObjectRef{
+			Backend: upload.StorageBackend,
+			Bucket:  nullableSQLString(upload.StorageBucket),
+			Key:     nullableSQLString(upload.StorageKey),
+		}, nullableSQLString(upload.BackendUploadID), completedParts)
+		if err != nil {
 			return err
 		}
+		if expectedMD5 != "" {
+			// Preserve the existing API contract, which validates the caller-provided digest of the full assembled payload.
+			body, err := svc.opt.Store.GetObject(ctx, DatasetObjectRef{
+				Backend: metadata.Backend,
+				Bucket:  metadata.Bucket,
+				Key:     metadata.Key,
+			})
+			if err != nil {
+				return err
+			}
+			defer body.Close()
 
-		written, copyErr := io.Copy(io.MultiWriter(assembledFile, hasher), partFile)
-		partFile.Close()
-		if copyErr != nil {
-			return copyErr
+			hasher := md5.New()
+			if _, err := io.Copy(hasher, body); err != nil {
+				return err
+			}
+			if actual := hex.EncodeToString(hasher.Sum(nil)); !strings.EqualFold(actual, expectedMD5) {
+				return ie.NewBadRequestError(fmt.Errorf("BadDigest"))
+			}
 		}
-		totalSize += written
-		if svc.opt.MaxTotalSize > 0 && totalSize > svc.opt.MaxTotalSize {
-			return ie.NewBadRequestError(fmt.Errorf("EntityTooLarge"))
+
+		finalRef := svc.opt.Storage.ContentRef(datasetUUID.String())
+		if finalRef.Key != metadata.Key || finalRef.Bucket != metadata.Bucket {
+			body, err := svc.opt.Store.GetObject(ctx, DatasetObjectRef{
+				Backend: metadata.Backend,
+				Bucket:  metadata.Bucket,
+				Key:     metadata.Key,
+			})
+			if err != nil {
+				return err
+			}
+
+			payload, err := io.ReadAll(body)
+			body.Close()
+			if err != nil {
+				return err
+			}
+
+			finalMeta, err := svc.opt.Store.PutObject(ctx, finalRef, payload, ds.Format)
+			if err != nil {
+				return err
+			}
+			_ = svc.opt.Store.DeleteObject(ctx, DatasetObjectRef{
+				Backend: metadata.Backend,
+				Bucket:  metadata.Bucket,
+				Key:     metadata.Key,
+			})
+			metadata = finalMeta
+		}
+	} else {
+		inlineContent, metadata, err = svc.assembleInlineUpload(uploadID, parts, expectedMD5)
+		if err != nil {
+			return err
 		}
 	}
 
-	actualMD5 := hex.EncodeToString(hasher.Sum(nil))
-	if expectedMD5 != "" && !strings.EqualFold(actualMD5, expectedMD5) {
-		return ie.NewBadRequestError(fmt.Errorf("BadDigest"))
-	}
-
-	if err := assembledFile.Close(); err != nil {
-		return err
-	}
-
-	content, err := os.ReadFile(assembledPath)
+	_, err = svc.q.UpdateDatasetByUUID(ctx, postgres.UpdateDatasetByUUIDParams{
+		Uuid:           datasetUUID,
+		SetContent:     true,
+		Content:        inlineContent,
+		Checksum:       metadata.Checksum,
+		Size:           int32(metadata.Size),
+		StorageBackend: metadata.Backend,
+		StorageBucket:  metadata.Bucket,
+		StorageKey:     metadata.Key,
+	})
 	if err != nil {
-		return err
-	}
-
-	dsSvc := NewDatasetService(svc.db)
-	if _, err := dsSvc.UpdateDatasetByUuid(ctx, datasetUUID, UpdateDatasetByUuidParams{
-		Content: &content,
-	}); err != nil {
 		return err
 	}
 
@@ -283,7 +355,83 @@ func (svc *DatasetUploadService) AssembleUpload(ctx context.Context, datasetUUID
 		return err
 	}
 
-	return os.RemoveAll(svc.uploadDir(uploadID))
+	if svc.opt.Store == nil {
+		return os.RemoveAll(svc.uploadDir(uploadID))
+	}
+	return nil
+}
+
+func (svc *DatasetUploadService) assembleInlineUpload(uploadID string, parts []postgres.DatasetUploadPart, expectedMD5 string) ([]byte, DatasetStorageMetadata, error) {
+	assembledFile, err := os.CreateTemp(svc.uploadDir(uploadID), "assembled-*.bin")
+	if err != nil {
+		return nil, DatasetStorageMetadata{}, err
+	}
+	assembledPath := assembledFile.Name()
+	defer func() {
+		assembledFile.Close()
+		_ = os.Remove(assembledPath)
+	}()
+
+	md5Hasher := md5.New()
+	var totalSize int64
+	for _, part := range parts {
+		partFile, err := os.Open(svc.partPath(uploadID, int(part.PartNumber)))
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, DatasetStorageMetadata{}, ie.NewBadRequestError(fmt.Errorf("InvalidPart"))
+			}
+			return nil, DatasetStorageMetadata{}, err
+		}
+
+		written, copyErr := io.Copy(io.MultiWriter(assembledFile, md5Hasher), partFile)
+		partFile.Close()
+		if copyErr != nil {
+			return nil, DatasetStorageMetadata{}, copyErr
+		}
+		totalSize += written
+		if svc.opt.MaxTotalSize > 0 && totalSize > svc.opt.MaxTotalSize {
+			return nil, DatasetStorageMetadata{}, ie.NewBadRequestError(fmt.Errorf("EntityTooLarge"))
+		}
+	}
+
+	actualMD5 := hex.EncodeToString(md5Hasher.Sum(nil))
+	if expectedMD5 != "" && !strings.EqualFold(actualMD5, expectedMD5) {
+		return nil, DatasetStorageMetadata{}, ie.NewBadRequestError(fmt.Errorf("BadDigest"))
+	}
+
+	content, err := os.ReadFile(assembledPath)
+	if err != nil {
+		return nil, DatasetStorageMetadata{}, err
+	}
+
+	return content, DatasetStorageMetadata{
+		Backend:  DatasetStorageBackendInline,
+		Size:     int64(len(content)),
+		Checksum: checksumHex(content),
+	}, nil
+}
+
+func (svc *DatasetUploadService) readUploadBody(content io.Reader, expectedMD5 string) ([]byte, string, error) {
+	reader := content
+	if svc.opt.MaxPartSize > 0 {
+		reader = io.LimitReader(content, svc.opt.MaxPartSize+1)
+	}
+
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, "", err
+	}
+	if svc.opt.MaxPartSize > 0 && int64(len(body)) > svc.opt.MaxPartSize {
+		return nil, "", ie.NewBadRequestError(fmt.Errorf("PartTooLarge"))
+	}
+
+	sum := md5.Sum(body)
+	actualMD5 := hex.EncodeToString(sum[:])
+	if expectedMD5 != "" && !strings.EqualFold(actualMD5, expectedMD5) {
+		return nil, "", ie.NewBadRequestError(fmt.Errorf("BadDigest"))
+	}
+
+	return body, strings.ToLower(actualMD5), nil
 }
 
 func (svc *DatasetUploadService) uploadDir(uploadID string) string {
@@ -303,4 +451,18 @@ func safePathPart(value string) string {
 	}
 
 	return hex.EncodeToString([]byte(value))
+}
+
+func nullableString(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
+
+func nullableSQLString(v sql.NullString) string {
+	if !v.Valid {
+		return ""
+	}
+	return v.String
 }

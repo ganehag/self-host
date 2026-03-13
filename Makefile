@@ -31,3 +31,9 @@ bench-write-heavy:
 
 bench-down:
 	./bench/down-local.sh
+
+seaweedfs-test:
+	./test/seaweedfs/run-local.sh
+
+seaweedfs-down:
+	./test/seaweedfs/down-local.sh

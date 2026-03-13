@@ -5,9 +5,10 @@
 package aapije
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -38,7 +39,11 @@ func (ra *RestApi) AddDatasets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s := services.NewDatasetService(db)
+	s, err := ra.newDatasetService(r, db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
 
 	params := &services.AddDatasetParams{
 		Name:      n.Name,
@@ -90,7 +95,11 @@ func (ra *RestApi) FindDatasets(w http.ResponseWriter, r *http.Request, p rest.F
 		return
 	}
 
-	svc := services.NewDatasetService(db)
+	svc, err := ra.newDatasetService(r, db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
 
 	if p.Tags != nil {
 		params := services.NewFindByTagsParams(
@@ -143,7 +152,11 @@ func (ra *RestApi) FindDatasetByUuid(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	svc := services.NewDatasetService(db)
+	svc, err := ra.newDatasetService(r, db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
 	datasets, err := svc.FindDatasetByUuid(r.Context(), datasetUUID)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
@@ -178,7 +191,11 @@ func (ra *RestApi) UpdateDatasetByUuid(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	svc := services.NewDatasetService(db)
+	svc, err := ra.newDatasetService(r, db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
 	params := services.UpdateDatasetByUuidParams{
 		Name:    updDataset.Name,
 		Content: updDataset.Content,
@@ -222,7 +239,11 @@ func (ra *RestApi) GetRawDatasetByUuid(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	svc := services.NewDatasetService(db)
+	svc, err := ra.newDatasetService(r, db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
 	f, err := svc.GetDatasetContentByUuid(r.Context(), datasetUUID)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
@@ -259,13 +280,19 @@ func (ra *RestApi) GetRawDatasetByUuid(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	if len(f.Content) == 0 {
+	if f.Body == nil && len(f.Content) == 0 {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-
+	if f.Body != nil {
+		defer f.Body.Close()
+		if _, err := io.Copy(w, f.Body); err != nil {
+			return
+		}
+		return
+	}
 	w.Write(f.Content)
 }
 
@@ -446,7 +473,11 @@ func (ra *RestApi) DeleteDatasetByUuid(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	svc := services.NewDatasetService(db)
+	svc, err := ra.newDatasetService(r, db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
 
 	count, err := svc.DeleteDataset(r.Context(), datasetUUID)
 	if err != nil {
@@ -466,15 +497,63 @@ func (ra *RestApi) newDatasetUploadService(r *http.Request, db *sql.DB) (*servic
 		return nil, err
 	}
 
-	rootDir := viper.GetString("dataset_uploads.root_dir")
-	if rootDir == "" {
-		return nil, fmt.Errorf("dataset_uploads.root_dir is empty")
+	storageOpt, err := ra.datasetStorageOptions(r.Context(), domaintoken.Domain)
+	if err != nil {
+		return nil, err
 	}
 
 	return services.NewDatasetUploadService(db, services.DatasetUploadOptions{
 		Domain:       domaintoken.Domain,
-		RootDir:      rootDir,
+		RootDir:      viper.GetString("dataset_uploads.root_dir"),
 		MaxPartSize:  viper.GetInt64("dataset_uploads.max_part_size"),
 		MaxTotalSize: viper.GetInt64("dataset_uploads.max_total_size"),
+		Storage:      storageOpt,
+		Store:        mustDatasetObjectStore(r.Context(), storageOpt),
 	}), nil
+}
+
+func (ra *RestApi) newDatasetService(r *http.Request, db *sql.DB) (*services.DatasetService, error) {
+	domaintoken, err := ra.GetDomainToken(r)
+	if err != nil {
+		return nil, err
+	}
+
+	storageOpt, err := ra.datasetStorageOptions(r.Context(), domaintoken.Domain)
+	if err != nil {
+		return nil, err
+	}
+
+	return services.NewDatasetService(db, storageOpt), nil
+}
+
+func (ra *RestApi) datasetStorageOptions(ctx context.Context, domain string) (services.DatasetStorageOptions, error) {
+	opt := services.DatasetStorageOptions{
+		Backend: viper.GetString("dataset_storage.backend"),
+		Domain:  domain,
+	}
+	if opt.Backend != services.DatasetStorageBackendS3 {
+		return opt, nil
+	}
+
+	opt.S3 = &services.DatasetS3Options{
+		Endpoint:        viper.GetString("dataset_storage.s3.endpoint"),
+		Region:          viper.GetString("dataset_storage.s3.region"),
+		Bucket:          viper.GetString("dataset_storage.s3.bucket"),
+		AccessKeyID:     viper.GetString("dataset_storage.s3.access_key_id"),
+		SecretAccessKey: viper.GetString("dataset_storage.s3.secret_access_key"),
+		UseSSL:          viper.GetBool("dataset_storage.s3.use_ssl"),
+		ForcePathStyle:  viper.GetBool("dataset_storage.s3.force_path_style"),
+		KeyPrefix:       viper.GetString("dataset_storage.s3.key_prefix"),
+	}
+
+	_, err := services.NewDatasetObjectStore(ctx, opt)
+	if err != nil {
+		return services.DatasetStorageOptions{}, err
+	}
+	return opt, nil
+}
+
+func mustDatasetObjectStore(ctx context.Context, opt services.DatasetStorageOptions) services.DatasetObjectStore {
+	store, _ := services.NewDatasetObjectStore(ctx, opt)
+	return store
 }
