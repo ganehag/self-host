@@ -116,19 +116,20 @@ func Server(address string) (<-chan error, error) {
 
 	r := chi.NewRouter()
 
-	// Zap logging of HTTP requests
-	r.Use(func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			t1 := time.Now()
-			defer func() {
-				logger.Info(r.Method,
-					zap.Duration("dur-ms", time.Since(t1)*1000),
-					zap.String("url", r.URL.String()),
-				)
-			}()
-			h.ServeHTTP(w, r)
+	if viper.GetBool("request_logging.enabled") {
+		r.Use(func(h http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t1 := time.Now()
+				defer func() {
+					logger.Info(r.Method,
+						zap.Duration("dur-ms", time.Since(t1)*1000),
+						zap.String("url", r.URL.String()),
+					)
+				}()
+				h.ServeHTTP(w, r)
+			})
 		})
-	})
+	}
 	r.Use(chiware.CleanPath)
 	r.Use(chiware.Heartbeat("/status"))
 	r.Use(chiware.Timeout(60 * time.Second))
@@ -163,7 +164,9 @@ func Server(address string) (<-chan error, error) {
 		viper.GetInt("rate_control.maxburst"),
 		viper.GetDuration("rate_control.cleanup"),
 	))
-	inlineMiddlewares = append(inlineMiddlewares, middleware.OapiRequestValidator(swagger))
+	if viper.GetBool("openapi_validation.enabled") {
+		inlineMiddlewares = append(inlineMiddlewares, middleware.OapiRequestValidator(swagger))
+	}
 	inlineMiddlewares = append(inlineMiddlewares, middleware.PolicyValidator())
 	rest.HandlerWithOptions(restApi, rest.ChiServerOptions{
 		BaseRouter:  r,

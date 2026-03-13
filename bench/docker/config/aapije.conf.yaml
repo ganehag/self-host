@@ -9,6 +9,12 @@ rate_control:
   maxburst: 100000
   cleanup: "20minutes"
 
+request_logging:
+  enabled: false
+
+openapi_validation:
+  enabled: false
+
 db_pool:
   max_open_conns: 64
   max_idle_conns: 32
