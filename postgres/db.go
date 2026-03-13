@@ -267,6 +267,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getTimeseriesByUUIDStmt, err = db.PrepareContext(ctx, getTimeseriesByUUID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTimeseriesByUUID: %w", err)
 	}
+	if q.getTsDailyRollupRangeStmt, err = db.PrepareContext(ctx, getTsDailyRollupRange); err != nil {
+		return nil, fmt.Errorf("error preparing query GetTsDailyRollupRange: %w", err)
+	}
 	if q.getTsDataRangeStmt, err = db.PrepareContext(ctx, getTsDataRange); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTsDataRange: %w", err)
 	}
@@ -803,6 +806,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getTimeseriesByUUIDStmt: %w", cerr)
 		}
 	}
+	if q.getTsDailyRollupRangeStmt != nil {
+		if cerr := q.getTsDailyRollupRangeStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getTsDailyRollupRangeStmt: %w", cerr)
+		}
+	}
 	if q.getTsDataRangeStmt != nil {
 		if cerr := q.getTsDataRangeStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getTsDataRangeStmt: %w", cerr)
@@ -1133,6 +1141,7 @@ type Queries struct {
 	getProgramCodeAtRevisionStmt       *sql.Stmt
 	getSignedProgramCodeAtHeadStmt     *sql.Stmt
 	getTimeseriesByUUIDStmt            *sql.Stmt
+	getTsDailyRollupRangeStmt          *sql.Stmt
 	getTsDataRangeStmt                 *sql.Stmt
 	getTsDataRangeAggStmt              *sql.Stmt
 	getTsHourlyRollupRangeStmt         *sql.Stmt
@@ -1262,6 +1271,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getProgramCodeAtRevisionStmt:       q.getProgramCodeAtRevisionStmt,
 		getSignedProgramCodeAtHeadStmt:     q.getSignedProgramCodeAtHeadStmt,
 		getTimeseriesByUUIDStmt:            q.getTimeseriesByUUIDStmt,
+		getTsDailyRollupRangeStmt:          q.getTsDailyRollupRangeStmt,
 		getTsDataRangeStmt:                 q.getTsDataRangeStmt,
 		getTsDataRangeAggStmt:              q.getTsDataRangeAggStmt,
 		getTsHourlyRollupRangeStmt:         q.getTsHourlyRollupRangeStmt,

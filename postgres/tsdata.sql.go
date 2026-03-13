@@ -90,6 +90,56 @@ func (q *Queries) DeleteTsDataRange(ctx context.Context, arg DeleteTsDataRangePa
 	return result.RowsAffected()
 }
 
+const getTsDailyRollupRange = `-- name: GetTsDailyRollupRange :many
+SELECT
+	ts_uuid,
+	bucket_ts,
+	sample_count,
+	sample_sum,
+	sample_min,
+	sample_max
+FROM tsdata_daily_rollups
+WHERE ts_uuid = ANY($1::uuid[])
+AND bucket_ts BETWEEN $2 AND $3
+ORDER BY ts_uuid ASC, bucket_ts ASC
+`
+
+type GetTsDailyRollupRangeParams struct {
+	TsUuids []uuid.UUID
+	Start   time.Time
+	Stop    time.Time
+}
+
+func (q *Queries) GetTsDailyRollupRange(ctx context.Context, arg GetTsDailyRollupRangeParams) ([]TsdataDailyRollup, error) {
+	rows, err := q.query(ctx, q.getTsDailyRollupRangeStmt, getTsDailyRollupRange, pq.Array(arg.TsUuids), arg.Start, arg.Stop)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TsdataDailyRollup{}
+	for rows.Next() {
+		var i TsdataDailyRollup
+		if err := rows.Scan(
+			&i.TsUuid,
+			&i.BucketTs,
+			&i.SampleCount,
+			&i.SampleSum,
+			&i.SampleMin,
+			&i.SampleMax,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTsDataRange = `-- name: GetTsDataRange :many
 SELECT	ts_uuid,
 	value,

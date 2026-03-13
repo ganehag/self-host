@@ -619,8 +619,8 @@ func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryM
 }
 
 func (svc *TimeseriesService) querySingleSourceAggregatedData(ctx context.Context, p QuerySingleSourceDataParams, tzloc *time.Location, fromUnit, toUnit units.Unit) ([]*rest.TsRow, error) {
-	if canUseHourlyRollups(p.UseRollups, p.Timezone, p.Precision) {
-		rawRows, rollupRows, err := svc.loadAggregateSources(ctx, []uuid.UUID{p.Uuid}, p.Start, p.End)
+	if rollupSourceForPrecision(p.UseRollups, p.Timezone, p.Precision) != "" {
+		rawRows, rollupRows, err := svc.loadAggregateSources(ctx, []uuid.UUID{p.Uuid}, p.Start, p.End, p.Precision)
 		if err != nil {
 			return nil, err
 		}
@@ -640,8 +640,8 @@ func (svc *TimeseriesService) querySingleSourceAggregatedData(ctx context.Contex
 }
 
 func (svc *TimeseriesService) queryMultiSourceAggregatedData(ctx context.Context, p QueryMultiSourceDataParams, tzloc *time.Location) (map[uuid.UUID][]rest.TsRow, error) {
-	if canUseHourlyRollups(p.UseRollups, p.Timezone, p.Precision) {
-		rawRows, rollupRows, err := svc.loadAggregateSources(ctx, p.Uuids, p.Start, p.End)
+	if rollupSourceForPrecision(p.UseRollups, p.Timezone, p.Precision) != "" {
+		rawRows, rollupRows, err := svc.loadAggregateSources(ctx, p.Uuids, p.Start, p.End, p.Precision)
 		if err != nil {
 			return nil, err
 		}
@@ -660,8 +660,18 @@ func (svc *TimeseriesService) queryMultiSourceAggregatedData(ctx context.Context
 	return aggregateMultiSourceRows(dataList, p, tzloc)
 }
 
-func (svc *TimeseriesService) loadAggregateSources(ctx context.Context, uuids []uuid.UUID, start, end time.Time) ([]postgres.GetTsDataRangeRow, []postgres.TsdataHourlyRollup, error) {
-	rollupRange, rawRanges := splitHourlyRollupRanges(start, end)
+type aggregateRollupRow struct {
+	TsUuid      uuid.UUID
+	BucketTs    time.Time
+	SampleCount int64
+	SampleSum   float64
+	SampleMin   float64
+	SampleMax   float64
+}
+
+func (svc *TimeseriesService) loadAggregateSources(ctx context.Context, uuids []uuid.UUID, start, end time.Time, precision string) ([]postgres.GetTsDataRangeRow, []aggregateRollupRow, error) {
+	source := rollupSourceForPrecision(true, "UTC", precision)
+	rollupRange, rawRanges := splitRollupRanges(start, end, source)
 
 	rawRows := make([]postgres.GetTsDataRangeRow, 0)
 	for _, rawRange := range rawRanges {
@@ -680,16 +690,38 @@ func (svc *TimeseriesService) loadAggregateSources(ctx context.Context, uuids []
 		return rawRows, nil, nil
 	}
 
-	rollupRows, err := svc.q.GetTsHourlyRollupRange(ctx, postgres.GetTsHourlyRollupRangeParams{
-		TsUuids: uuids,
-		Start:   rollupRange.Start,
-		Stop:    rollupRange.Stop,
-	})
-	if err != nil {
-		return nil, nil, err
+	switch source {
+	case "daily":
+		rows, err := svc.q.GetTsDailyRollupRange(ctx, postgres.GetTsDailyRollupRangeParams{
+			TsUuids: uuids,
+			Start:   rollupRange.Start,
+			Stop:    rollupRange.Stop,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		rollupRows := make([]aggregateRollupRow, 0, len(rows))
+		for _, row := range rows {
+			rollupRows = append(rollupRows, aggregateRollupRow(row))
+		}
+		return rawRows, rollupRows, nil
+	case "hourly":
+		rows, err := svc.q.GetTsHourlyRollupRange(ctx, postgres.GetTsHourlyRollupRangeParams{
+			TsUuids: uuids,
+			Start:   rollupRange.Start,
+			Stop:    rollupRange.Stop,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		rollupRows := make([]aggregateRollupRow, 0, len(rows))
+		for _, row := range rows {
+			rollupRows = append(rollupRows, aggregateRollupRow(row))
+		}
+		return rawRows, rollupRows, nil
+	default:
+		return rawRows, nil, nil
 	}
-
-	return rawRows, rollupRows, nil
 }
 
 func shouldAggregateData(aggregate, precision string) bool {
@@ -805,7 +837,7 @@ func aggregateSingleSourceRows(rows []postgres.GetTsDataRangeRow, p QuerySingleS
 	return result, nil
 }
 
-func aggregateSingleSourceFromSources(rawRows []postgres.GetTsDataRangeRow, rollupRows []postgres.TsdataHourlyRollup, p QuerySingleSourceDataParams, tzloc *time.Location, fromUnit, toUnit units.Unit) ([]*rest.TsRow, error) {
+func aggregateSingleSourceFromSources(rawRows []postgres.GetTsDataRangeRow, rollupRows []aggregateRollupRow, p QuerySingleSourceDataParams, tzloc *time.Location, fromUnit, toUnit units.Unit) ([]*rest.TsRow, error) {
 	buckets := make(map[time.Time]*aggregateBucket, len(rawRows)+len(rollupRows))
 	keys := make([]time.Time, 0, len(rawRows)+len(rollupRows))
 
@@ -935,7 +967,7 @@ func aggregateMultiSourceRows(rows []postgres.GetTsDataRangeRow, p QueryMultiSou
 	return mapping, nil
 }
 
-func aggregateMultiSourceFromSources(rawRows []postgres.GetTsDataRangeRow, rollupRows []postgres.TsdataHourlyRollup, p QueryMultiSourceDataParams, tzloc *time.Location) (map[uuid.UUID][]rest.TsRow, error) {
+func aggregateMultiSourceFromSources(rawRows []postgres.GetTsDataRangeRow, rollupRows []aggregateRollupRow, p QueryMultiSourceDataParams, tzloc *time.Location) (map[uuid.UUID][]rest.TsRow, error) {
 	mapping := make(map[uuid.UUID][]rest.TsRow, len(p.Uuids))
 	bucketsBySeries := make(map[uuid.UUID]map[time.Time]*aggregateBucket, len(p.Uuids))
 	keysBySeries := make(map[uuid.UUID][]time.Time, len(p.Uuids))
@@ -1122,17 +1154,72 @@ type timeRange struct {
 	Stop  time.Time
 }
 
-func canUseHourlyRollups(enabled bool, timezone, precision string) bool {
+func rollupSourceForPrecision(enabled bool, timezone, precision string) string {
 	if enabled == false || timezone != "UTC" {
-		return false
+		return ""
 	}
 
 	switch precision {
-	case "hour", "day", "week", "month", "year", "decade", "century", "millennia":
-		return true
+	case "day", "week", "month", "year", "decade", "century", "millennia":
+		return "daily"
+	case "hour":
+		return "hourly"
 	default:
-		return false
+		return ""
 	}
+}
+
+func splitRollupRanges(start, end time.Time, source string) (*timeRange, []timeRange) {
+	switch source {
+	case "daily":
+		return splitDailyRollupRanges(start, end)
+	case "hourly":
+		return splitHourlyRollupRanges(start, end)
+	default:
+		return nil, []timeRange{{Start: start, Stop: end}}
+	}
+}
+
+func splitDailyRollupRanges(start, end time.Time) (*timeRange, []timeRange) {
+	if end.Before(start) {
+		return nil, nil
+	}
+
+	firstFullDay := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+	if firstFullDay.Before(start) {
+		firstFullDay = firstFullDay.AddDate(0, 0, 1)
+	}
+
+	lastFullDay := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, end.Location())
+	if lastFullDay.AddDate(0, 0, 1).After(end.Add(time.Microsecond)) {
+		lastFullDay = lastFullDay.AddDate(0, 0, -1)
+	}
+
+	if lastFullDay.Before(firstFullDay) {
+		return nil, []timeRange{{Start: start, Stop: end}}
+	}
+
+	rawRanges := make([]timeRange, 0, 2)
+	if start.Before(firstFullDay) {
+		rawRanges = append(rawRanges, timeRange{
+			Start: start,
+			Stop:  firstFullDay.Add(-time.Microsecond),
+		})
+	}
+
+	rightStart := lastFullDay.AddDate(0, 0, 1)
+	if rightStart.Before(end) || rightStart.Equal(end) {
+		rawRanges = append(rawRanges, timeRange{
+			Start: rightStart,
+			Stop:  end,
+		})
+	}
+
+	return &timeRange{Start: firstFullDay, Stop: lastFullDay}, rawRanges
+}
+
+func canUseHourlyRollups(enabled bool, timezone, precision string) bool {
+	return rollupSourceForPrecision(enabled, timezone, precision) != ""
 }
 
 func splitHourlyRollupRanges(start, end time.Time) (*timeRange, []timeRange) {
