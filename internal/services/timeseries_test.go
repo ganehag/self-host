@@ -7,10 +7,13 @@ package services
 import (
 	"context"
 	"log"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+
+	ie "github.com/self-host/self-host/internal/errors"
 )
 
 // Tests can run in any order, so we need to run everything (Timeseries related) in one function
@@ -146,5 +149,123 @@ func TestSplitDailyRollupRangesUsesUTCBoundaries(t *testing.T) {
 	}
 	if !rawRanges[1].Start.Equal(time.Date(2024, 1, 4, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("unexpected right raw start: %s", rawRanges[1].Start)
+	}
+}
+
+func TestQueryMultiSourceDataEnforcesPerSeriesLimitAfterValueFiltering(t *testing.T) {
+	ctx := context.Background()
+	svc := NewTimeseriesService(db)
+	createdBy := uuid.MustParse(rootUserUUID)
+
+	ts1, err := svc.AddTimeseries(ctx, &NewTimeseriesParams{
+		Name:      "QueryLimitSeriesOne",
+		CreatedBy: createdBy,
+		Tags:      []string{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts1ID := uuid.MustParse(ts1.Uuid)
+
+	ts2, err := svc.AddTimeseries(ctx, &NewTimeseriesParams{
+		Name:      "QueryLimitSeriesTwo",
+		CreatedBy: createdBy,
+		Tags:      []string{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts2ID := uuid.MustParse(ts2.Uuid)
+
+	base := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := svc.AddDataToTimeseries(ctx, AddDataToTimeseriesParams{
+		Uuid:      ts1ID,
+		CreatedBy: createdBy,
+		Points: []DataPoint{
+			{Timestamp: base, Value: 1},
+			{Timestamp: base.Add(time.Minute), Value: 2},
+			{Timestamp: base.Add(2 * time.Minute), Value: 3},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.AddDataToTimeseries(ctx, AddDataToTimeseriesParams{
+		Uuid:      ts2ID,
+		CreatedBy: createdBy,
+		Points: []DataPoint{
+			{Timestamp: base, Value: 10},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ge := float32(2)
+	results, err := svc.QueryMultiSourceData(ctx, QueryMultiSourceDataParams{
+		Uuids:              []uuid.UUID{ts1ID, ts2ID},
+		Start:              base.Add(-time.Minute),
+		End:                base.Add(3 * time.Minute),
+		GreaterOrEq:        &ge,
+		Timezone:           "UTC",
+		MaxPointsPerSeries: 2,
+		MaxTotalPoints:     10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 series in result, got %d", len(results))
+	}
+	if len(results[0].Data) != 2 {
+		t.Fatalf("expected 2 filtered points for first series, got %d", len(results[0].Data))
+	}
+}
+
+func TestQueryMultiSourceDataReturns413WhenSeriesExceedsLimit(t *testing.T) {
+	ctx := context.Background()
+	svc := NewTimeseriesService(db)
+	createdBy := uuid.MustParse(rootUserUUID)
+
+	ts, err := svc.AddTimeseries(ctx, &NewTimeseriesParams{
+		Name:      "QueryLimitExceededSeries",
+		CreatedBy: createdBy,
+		Tags:      []string{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tsID := uuid.MustParse(ts.Uuid)
+
+	base := time.Date(2024, 2, 2, 0, 0, 0, 0, time.UTC)
+	if _, err := svc.AddDataToTimeseries(ctx, AddDataToTimeseriesParams{
+		Uuid:      tsID,
+		CreatedBy: createdBy,
+		Points: []DataPoint{
+			{Timestamp: base, Value: 1},
+			{Timestamp: base.Add(time.Minute), Value: 2},
+			{Timestamp: base.Add(2 * time.Minute), Value: 3},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = svc.QueryMultiSourceData(ctx, QueryMultiSourceDataParams{
+		Uuids:              []uuid.UUID{tsID},
+		Start:              base.Add(-time.Minute),
+		End:                base.Add(3 * time.Minute),
+		Timezone:           "UTC",
+		MaxPointsPerSeries: 2,
+		MaxTotalPoints:     10,
+	})
+	if err == nil {
+		t.Fatal("expected point limit error")
+	}
+
+	httpErr, ok := err.(*ie.HTTPError)
+	if !ok {
+		t.Fatalf("expected HTTPError, got %T", err)
+	}
+	if httpErr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", httpErr.Code)
 	}
 }

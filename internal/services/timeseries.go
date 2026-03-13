@@ -583,16 +583,36 @@ func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryM
 			return nil, err
 		}
 	} else {
-		dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
-			TsUuids: p.Uuids,
-			Start:   p.Start,
-			Stop:    p.End,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if err := appendRawMultiSourceRows(mapping, dataList, p, tzloc); err != nil {
-			return nil, err
+		if p.MaxPointsPerSeries > 0 || p.MaxTotalPoints > 0 {
+			dataList, err := svc.q.GetTsDataRangeLimited(ctx, postgres.GetTsDataRangeLimitedParams{
+				TsUuids:            p.Uuids,
+				Start:              p.Start,
+				Stop:               p.End,
+				Ge:                 nullableFloat32Value(p.GreaterOrEq),
+				Le:                 nullableFloat32Value(p.LessOrEq),
+				GeNull:             p.GreaterOrEq == nil,
+				LeNull:             p.LessOrEq == nil,
+				MaxPointsPerSeries: int64(p.MaxPointsPerSeries),
+				MaxTotalPoints:     int64(p.MaxTotalPoints),
+			})
+			if err != nil {
+				return nil, err
+			}
+			if err := appendRawMultiSourceLimitedRows(mapping, dataList, p, tzloc); err != nil {
+				return nil, err
+			}
+		} else {
+			dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+				TsUuids: p.Uuids,
+				Start:   p.Start,
+				Stop:    p.End,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if err := appendRawMultiSourceRows(mapping, dataList, p, tzloc); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -884,6 +904,30 @@ func appendRawMultiSourceRows(mapping map[uuid.UUID][]rest.TsRow, rows []postgre
 		sort.Slice(mapping[key], func(i, j int) bool {
 			return mapping[key][i].Ts.Before(mapping[key][j].Ts)
 		})
+	}
+
+	return nil
+}
+
+func appendRawMultiSourceLimitedRows(mapping map[uuid.UUID][]rest.TsRow, rows []postgres.GetTsDataRangeLimitedRow, p QueryMultiSourceDataParams, tzloc *time.Location) error {
+	totalPoints := 0
+	for _, item := range rows {
+		if p.MaxPointsPerSeries > 0 && item.SeriesRowNum > int64(p.MaxPointsPerSeries) {
+			return ie.NewHTTPError(nil, http.StatusRequestEntityTooLarge, fmt.Sprintf("timeseries query returned more than %d points for one series", p.MaxPointsPerSeries))
+		}
+		if p.MaxTotalPoints > 0 && item.TotalRowNum > int64(p.MaxTotalPoints) {
+			return ie.NewHTTPError(nil, http.StatusRequestEntityTooLarge, fmt.Sprintf("timeseries query returned more than %d total points", p.MaxTotalPoints))
+		}
+
+		mapping[item.TsUuid] = append(mapping[item.TsUuid], rest.TsRow{
+			V:  float32(item.Value),
+			Ts: item.Ts.In(tzloc),
+		})
+
+		totalPoints++
+		if err := validateMultiSeriesLimits(len(mapping[item.TsUuid]), totalPoints, p); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -19,26 +19,19 @@ WITH usr AS (
 	LIMIT 1
 )
 SELECT COALESCE((
-	SELECT
-		EXISTS (
-			SELECT 1
-			FROM user_groups
-			INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
-			WHERE user_groups.user_uuid = usr.uuid
-			AND group_policies.action = $1::policy_action
-			AND group_policies.effect = 'allow'
-			AND $2::TEXT LIKE group_policies.resource
-		)
-		AND NOT EXISTS (
-			SELECT 1
-			FROM user_groups
-			INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
-			WHERE user_groups.user_uuid = usr.uuid
-			AND group_policies.action = $1::policy_action
-			AND group_policies.effect = 'deny'
-			AND $2::TEXT LIKE group_policies.resource
-		)
+	SELECT match.effect = 'allow'
 	FROM usr
+	LEFT JOIN LATERAL (
+		SELECT group_policies.effect
+		FROM user_groups
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE user_groups.user_uuid = usr.uuid
+		AND group_policies.action = $1::policy_action
+		AND $2::TEXT LIKE group_policies.resource
+		ORDER BY group_policies.priority ASC,
+			CASE WHEN group_policies.effect = 'deny' THEN 0 ELSE 1 END ASC
+		LIMIT 1
+	) AS match ON true
 	LIMIT 1
 ), false)::boolean AS access
 `
@@ -68,29 +61,21 @@ WITH usr AS (
 		$2::policy_action AS action,
 		unnest((SELECT $3::TEXT[]))::TEXT AS resource
 	FROM usr
-)
+	)
 SELECT
-	COALESCE(bool_and(
-		EXISTS (
-			SELECT 1
-			FROM user_groups
-			INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
-			WHERE user_groups.user_uuid = usr_r.uuid
-			AND group_policies.action = usr_r.action
-			AND group_policies.effect = 'allow'
-			AND usr_r.resource LIKE group_policies.resource
-		)
-		AND NOT EXISTS (
-			SELECT 1
-			FROM user_groups
-			INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
-			WHERE user_groups.user_uuid = usr_r.uuid
-			AND group_policies.action = usr_r.action
-			AND group_policies.effect = 'deny'
-			AND usr_r.resource LIKE group_policies.resource
-		)
-	), false)::boolean AS access
+	COALESCE(bool_and(match.effect = 'allow'), false)::boolean AS access
 FROM usr_r
+LEFT JOIN LATERAL (
+	SELECT group_policies.effect
+	FROM user_groups
+	INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+	WHERE user_groups.user_uuid = usr_r.uuid
+	AND group_policies.action = usr_r.action
+	AND usr_r.resource LIKE group_policies.resource
+	ORDER BY group_policies.priority ASC,
+		CASE WHEN group_policies.effect = 'deny' THEN 0 ELSE 1 END ASC
+	LIMIT 1
+) AS match ON true
 `
 
 type CheckUserTokenHasAccessManyParams struct {

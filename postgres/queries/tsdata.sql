@@ -6,6 +6,31 @@ FROM tsdata
 WHERE ts_uuid = ANY(sqlc.arg(ts_uuids)::uuid[])
 AND ts BETWEEN sqlc.arg(start) AND sqlc.arg(stop);
 
+-- name: GetTsDataRangeLimited :many
+WITH ranked AS (
+	SELECT
+		ts_uuid,
+		value,
+		ts,
+		ROW_NUMBER() OVER (PARTITION BY ts_uuid ORDER BY ts ASC) AS series_row_num,
+		ROW_NUMBER() OVER (ORDER BY ts_uuid ASC, ts ASC) AS total_row_num
+	FROM tsdata
+	WHERE ts_uuid = ANY(sqlc.arg(ts_uuids)::uuid[])
+	AND ts BETWEEN sqlc.arg(start) AND sqlc.arg(stop)
+	AND (sqlc.arg(ge_null)::boolean = true OR tsdata.value >= sqlc.arg(ge))
+	AND (sqlc.arg(le_null)::boolean = true OR tsdata.value <= sqlc.arg(le))
+)
+SELECT
+	ts_uuid,
+	value,
+	ts,
+	series_row_num,
+	total_row_num
+FROM ranked
+WHERE (sqlc.arg(max_points_per_series)::BIGINT <= 0 OR series_row_num <= sqlc.arg(max_points_per_series)::BIGINT + 1)
+AND (sqlc.arg(max_total_points)::BIGINT <= 0 OR total_row_num <= sqlc.arg(max_total_points)::BIGINT + 1)
+ORDER BY ts_uuid ASC, ts ASC;
+
 -- name: GetTsHourlyRollupRange :many
 SELECT
 	ts_uuid,

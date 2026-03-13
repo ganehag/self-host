@@ -159,3 +159,11 @@ func nullableUUIDString(id uuid.NullUUID) string {
 
 	return id.UUID.String()
 }
+
+func nullableFloat32Value(v *float32) float64 {
+	if v == nil {
+		return 0
+	}
+
+	return float64(*v)
+}

@@ -267,6 +267,91 @@ func (q *Queries) GetTsDataRangeAgg(ctx context.Context, arg GetTsDataRangeAggPa
 	return items, nil
 }
 
+const getTsDataRangeLimited = `-- name: GetTsDataRangeLimited :many
+WITH ranked AS (
+	SELECT
+		ts_uuid,
+		value,
+		ts,
+		ROW_NUMBER() OVER (PARTITION BY ts_uuid ORDER BY ts ASC) AS series_row_num,
+		ROW_NUMBER() OVER (ORDER BY ts_uuid ASC, ts ASC) AS total_row_num
+	FROM tsdata
+	WHERE ts_uuid = ANY($3::uuid[])
+	AND ts BETWEEN $4 AND $5
+	AND ($6::boolean = true OR tsdata.value >= $7)
+	AND ($8::boolean = true OR tsdata.value <= $9)
+)
+SELECT
+	ts_uuid,
+	value,
+	ts,
+	series_row_num,
+	total_row_num
+FROM ranked
+WHERE ($1::BIGINT <= 0 OR series_row_num <= $1::BIGINT + 1)
+AND ($2::BIGINT <= 0 OR total_row_num <= $2::BIGINT + 1)
+ORDER BY ts_uuid ASC, ts ASC
+`
+
+type GetTsDataRangeLimitedParams struct {
+	MaxPointsPerSeries int64
+	MaxTotalPoints     int64
+	TsUuids            []uuid.UUID
+	Start              time.Time
+	Stop               time.Time
+	GeNull             bool
+	Ge                 float64
+	LeNull             bool
+	Le                 float64
+}
+
+type GetTsDataRangeLimitedRow struct {
+	TsUuid       uuid.UUID
+	Value        float64
+	Ts           time.Time
+	SeriesRowNum int64
+	TotalRowNum  int64
+}
+
+func (q *Queries) GetTsDataRangeLimited(ctx context.Context, arg GetTsDataRangeLimitedParams) ([]GetTsDataRangeLimitedRow, error) {
+	rows, err := q.query(ctx, q.getTsDataRangeLimitedStmt, getTsDataRangeLimited,
+		arg.MaxPointsPerSeries,
+		arg.MaxTotalPoints,
+		pq.Array(arg.TsUuids),
+		arg.Start,
+		arg.Stop,
+		arg.GeNull,
+		arg.Ge,
+		arg.LeNull,
+		arg.Le,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTsDataRangeLimitedRow{}
+	for rows.Next() {
+		var i GetTsDataRangeLimitedRow
+		if err := rows.Scan(
+			&i.TsUuid,
+			&i.Value,
+			&i.Ts,
+			&i.SeriesRowNum,
+			&i.TotalRowNum,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTsHourlyRollupRange = `-- name: GetTsHourlyRollupRange :many
 SELECT
 	ts_uuid,

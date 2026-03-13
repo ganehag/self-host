@@ -16,4 +16,6 @@ FROM group_policies
 INNER JOIN user_groups ON user_groups.group_uuid = group_policies.group_uuid
 INNER JOIN user_tokens ON user_tokens.user_uuid = user_groups.user_uuid
 WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
-ORDER BY priority;
+ORDER BY priority ASC,
+	CASE WHEN effect = 'deny' THEN 0 ELSE 1 END ASC,
+	resource ASC;
