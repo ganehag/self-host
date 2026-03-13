@@ -7,6 +7,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,17 +16,21 @@ import (
 
 const createDataset = `-- name: CreateDataset :one
 WITH ds AS (
-	INSERT INTO datasets (name, format, content, checksum, size, belongs_to, created_by, updated_by, tags)
+	INSERT INTO datasets (uuid, name, format, content, checksum, size, belongs_to, created_by, updated_by, tags, storage_backend, storage_bucket, storage_key)
 	VALUES(
-		$1::text,
+		$1::uuid,
 		$2::text,
-		$3::bytea,
-		sha256($3::bytea),
-		length($3)::integer,
-		NULLIF($4::uuid, '00000000-0000-0000-0000-000000000000'::uuid),
-		$5::uuid,
-		$5::uuid,
-		$6
+		$3::text,
+		$4::bytea,
+		decode($5::text, 'hex'),
+		$6::integer,
+		NULLIF($7::uuid, '00000000-0000-0000-0000-000000000000'::uuid),
+		$8::uuid,
+		$8::uuid,
+		$9,
+		$10::text,
+		NULLIF($11::text, ''),
+		NULLIF($12::text, '')
 	)
 	RETURNING
 		uuid,
@@ -67,12 +72,18 @@ FROM ds LIMIT 1
 `
 
 type CreateDatasetParams struct {
-	Name      string
-	Format    string
-	Content   []byte
-	BelongsTo uuid.UUID
-	CreatedBy uuid.UUID
-	Tags      []string
+	Uuid           uuid.UUID
+	Name           string
+	Format         string
+	Content        []byte
+	Checksum       string
+	Size           int32
+	BelongsTo      uuid.UUID
+	CreatedBy      uuid.UUID
+	Tags           []string
+	StorageBackend string
+	StorageBucket  string
+	StorageKey     string
 }
 
 type CreateDatasetRow struct {
@@ -91,12 +102,18 @@ type CreateDatasetRow struct {
 
 func (q *Queries) CreateDataset(ctx context.Context, arg CreateDatasetParams) (CreateDatasetRow, error) {
 	row := q.queryRow(ctx, q.createDatasetStmt, createDataset,
+		arg.Uuid,
 		arg.Name,
 		arg.Format,
 		arg.Content,
+		arg.Checksum,
+		arg.Size,
 		arg.BelongsTo,
 		arg.CreatedBy,
 		pq.Array(arg.Tags),
+		arg.StorageBackend,
+		arg.StorageBucket,
+		arg.StorageKey,
 	)
 	var i CreateDatasetRow
 	err := row.Scan(
@@ -471,22 +488,64 @@ func (q *Queries) FindDatasetsByTags(ctx context.Context, arg FindDatasetsByTags
 }
 
 const getDatasetContentByUUID = `-- name: GetDatasetContentByUUID :one
-SELECT format, content, encode(checksum, 'hex') AS checksum
+SELECT format, content, encode(checksum, 'hex') AS checksum, size, storage_backend, storage_bucket, storage_key
 FROM datasets
 WHERE datasets.uuid = $1
 LIMIT 1
 `
 
 type GetDatasetContentByUUIDRow struct {
-	Format   string
-	Content  []byte
-	Checksum string
+	Format         string
+	Content        []byte
+	Checksum       string
+	Size           int32
+	StorageBackend string
+	StorageBucket  sql.NullString
+	StorageKey     sql.NullString
 }
 
 func (q *Queries) GetDatasetContentByUUID(ctx context.Context, argUuid uuid.UUID) (GetDatasetContentByUUIDRow, error) {
 	row := q.queryRow(ctx, q.getDatasetContentByUUIDStmt, getDatasetContentByUUID, argUuid)
 	var i GetDatasetContentByUUIDRow
-	err := row.Scan(&i.Format, &i.Content, &i.Checksum)
+	err := row.Scan(
+		&i.Format,
+		&i.Content,
+		&i.Checksum,
+		&i.Size,
+		&i.StorageBackend,
+		&i.StorageBucket,
+		&i.StorageKey,
+	)
+	return i, err
+}
+
+const getDatasetObjectRefByUUID = `-- name: GetDatasetObjectRefByUUID :one
+SELECT format, encode(checksum, 'hex') AS checksum, size, storage_backend, storage_bucket, storage_key
+FROM datasets
+WHERE datasets.uuid = $1
+LIMIT 1
+`
+
+type GetDatasetObjectRefByUUIDRow struct {
+	Format         string
+	Checksum       string
+	Size           int32
+	StorageBackend string
+	StorageBucket  sql.NullString
+	StorageKey     sql.NullString
+}
+
+func (q *Queries) GetDatasetObjectRefByUUID(ctx context.Context, argUuid uuid.UUID) (GetDatasetObjectRefByUUIDRow, error) {
+	row := q.queryRow(ctx, q.getDatasetObjectRefByUUIDStmt, getDatasetObjectRefByUUID, argUuid)
+	var i GetDatasetObjectRefByUUIDRow
+	err := row.Scan(
+		&i.Format,
+		&i.Checksum,
+		&i.Size,
+		&i.StorageBackend,
+		&i.StorageBucket,
+		&i.StorageKey,
+	)
 	return i, err
 }
 
@@ -506,32 +565,53 @@ SET
 		ELSE content
 	END,
 	checksum = CASE
-		WHEN $5::boolean THEN sha256($6::bytea)
+		WHEN $5::boolean THEN decode($7::text, 'hex')
 		ELSE checksum
 	END,
+	size = CASE
+		WHEN $5::boolean THEN $8::integer
+		ELSE size
+	END,
+	storage_backend = CASE
+		WHEN $5::boolean THEN $9::text
+		ELSE storage_backend
+	END,
+	storage_bucket = CASE
+		WHEN $5::boolean THEN NULLIF($10::text, '')
+		ELSE storage_bucket
+	END,
+	storage_key = CASE
+		WHEN $5::boolean THEN NULLIF($11::text, '')
+		ELSE storage_key
+	END,
 	belongs_to = CASE
-		WHEN $7::boolean THEN $8
+		WHEN $12::boolean THEN $13
 		ELSE belongs_to
 	END,
 	tags = CASE
-		WHEN $9::boolean THEN $10
+		WHEN $14::boolean THEN $15
 		ELSE tags
 	END
-WHERE datasets.uuid = $11
+WHERE datasets.uuid = $16
 `
 
 type UpdateDatasetByUUIDParams struct {
-	SetName      bool
-	Name         string
-	SetFormat    bool
-	Format       string
-	SetContent   bool
-	Content      []byte
-	SetThingUuid bool
-	ThingUuid    uuid.NullUUID
-	SetTags      bool
-	Tags         []string
-	Uuid         uuid.UUID
+	SetName        bool
+	Name           string
+	SetFormat      bool
+	Format         string
+	SetContent     bool
+	Content        []byte
+	Checksum       string
+	Size           int32
+	StorageBackend string
+	StorageBucket  string
+	StorageKey     string
+	SetThingUuid   bool
+	ThingUuid      uuid.NullUUID
+	SetTags        bool
+	Tags           []string
+	Uuid           uuid.UUID
 }
 
 func (q *Queries) UpdateDatasetByUUID(ctx context.Context, arg UpdateDatasetByUUIDParams) (int64, error) {
@@ -542,6 +622,11 @@ func (q *Queries) UpdateDatasetByUUID(ctx context.Context, arg UpdateDatasetByUU
 		arg.Format,
 		arg.SetContent,
 		arg.Content,
+		arg.Checksum,
+		arg.Size,
+		arg.StorageBackend,
+		arg.StorageBucket,
+		arg.StorageKey,
 		arg.SetThingUuid,
 		arg.ThingUuid,
 		arg.SetTags,

@@ -6,7 +6,10 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"io"
 
 	"github.com/google/uuid"
 	"github.com/self-host/self-host/api/aapije/rest"
@@ -17,24 +20,37 @@ import (
 type DatasetFile struct {
 	Format   string
 	Content  []byte
+	Body     io.ReadCloser
 	Checksum string
+	Size     int64
 }
 
 // DatasetService represents the repository used for interacting with Dataset records.
 type DatasetService struct {
-	q  *postgres.Queries
-	db *sql.DB
+	q     *postgres.Queries
+	db    *sql.DB
+	store DatasetObjectStore
+	opt   DatasetStorageOptions
 }
 
 // NewDatasetService instantiates the DatasetService repository.
-func NewDatasetService(db *sql.DB) *DatasetService {
+func NewDatasetService(db *sql.DB, opts ...DatasetStorageOptions) *DatasetService {
 	if db == nil {
 		return nil
 	}
 
+	var opt DatasetStorageOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	store, _ := NewDatasetObjectStore(context.Background(), opt)
+
 	return &DatasetService{
-		q:  postgres.New(db),
-		db: db,
+		q:     postgres.New(db),
+		db:    db,
+		store: store,
+		opt:   opt,
 	}
 }
 
@@ -57,6 +73,7 @@ func (svc *DatasetService) Exists(ctx context.Context, id uuid.UUID) (bool, erro
 }
 
 func (svc *DatasetService) AddDataset(ctx context.Context, p *AddDatasetParams) (*rest.Dataset, error) {
+	datasetUUID := uuid.New()
 	tags := make([]string, 0)
 	if p.Tags != nil {
 		for _, tag := range p.Tags {
@@ -64,17 +81,52 @@ func (svc *DatasetService) AddDataset(ctx context.Context, p *AddDatasetParams) 
 		}
 	}
 
+	content := p.Content
+	checksum := checksumHex(content)
+	size := len(content)
+	storageBackend := DatasetStorageBackendInline
+	storageBucket := ""
+	storageKey := ""
+	inlineContent := content
+
+	if svc.store != nil && len(content) > 0 {
+		ref := svc.opt.ContentRef(datasetUUID.String())
+		meta, err := svc.store.PutObject(ctx, ref, content, p.Format)
+		if err != nil {
+			return nil, err
+		}
+		checksum = meta.Checksum
+		size = int(meta.Size)
+		storageBackend = meta.Backend
+		storageBucket = meta.Bucket
+		storageKey = meta.Key
+		inlineContent = []byte{}
+	}
+
 	params := postgres.CreateDatasetParams{
-		Name:      p.Name,
-		Content:   p.Content,
-		Format:    p.Format,
-		CreatedBy: p.CreatedBy,
-		BelongsTo: p.ThingUuid,
-		Tags:      tags,
+		Uuid:           datasetUUID,
+		Name:           p.Name,
+		Content:        inlineContent,
+		Checksum:       checksum,
+		Size:           int32(size),
+		Format:         p.Format,
+		CreatedBy:      p.CreatedBy,
+		BelongsTo:      p.ThingUuid,
+		Tags:           tags,
+		StorageBackend: storageBackend,
+		StorageBucket:  storageBucket,
+		StorageKey:     storageKey,
 	}
 
 	dataset, err := svc.q.CreateDataset(ctx, params)
 	if err != nil {
+		if svc.store != nil && storageBackend == DatasetStorageBackendS3 {
+			_ = svc.store.DeleteObject(ctx, DatasetObjectRef{
+				Backend: storageBackend,
+				Bucket:  storageBucket,
+				Key:     storageKey,
+			})
+		}
 		return nil, err
 	}
 
@@ -262,10 +314,32 @@ func (svc *DatasetService) GetDatasetContentByUuid(ctx context.Context, id uuid.
 		return nil, err
 	}
 
+	if content.StorageBackend == DatasetStorageBackendS3 && content.StorageBucket.Valid && content.StorageKey.Valid {
+		if svc.store == nil {
+			return nil, ie.ErrorUndefined
+		}
+		body, err := svc.store.GetObject(ctx, DatasetObjectRef{
+			Backend: content.StorageBackend,
+			Bucket:  content.StorageBucket.String,
+			Key:     content.StorageKey.String,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return &DatasetFile{
+			Format:   content.Format,
+			Body:     body,
+			Checksum: content.Checksum,
+			Size:     int64(content.Size),
+		}, nil
+	}
+
 	return &DatasetFile{
 		Format:   content.Format,
 		Content:  content.Content,
 		Checksum: content.Checksum,
+		Size:     int64(content.Size),
 	}, nil
 }
 
@@ -291,6 +365,11 @@ func (svc *DatasetService) UpdateDatasetByUuid(ctx context.Context, id uuid.UUID
 		return 1, nil
 	}
 
+	var previousRef postgres.GetDatasetObjectRefByUUIDRow
+	if setContent {
+		previousRef, _ = svc.q.GetDatasetObjectRefByUUID(ctx, id)
+	}
+
 	params := postgres.UpdateDatasetByUUIDParams{
 		Uuid:         id,
 		SetName:      setName,
@@ -307,7 +386,37 @@ func (svc *DatasetService) UpdateDatasetByUuid(ctx context.Context, id uuid.UUID
 		params.Format = *p.Format
 	}
 	if p.Content != nil {
-		params.Content = *p.Content
+		content := *p.Content
+		params.Content = content
+		params.Checksum = checksumHex(content)
+		params.Size = int32(len(content))
+		params.StorageBackend = DatasetStorageBackendInline
+		params.StorageBucket = ""
+		params.StorageKey = ""
+
+		if svc.store != nil && len(content) > 0 {
+			format := params.Format
+			if !setFormat {
+				current, err := svc.q.FindDatasetByUUID(ctx, id)
+				if err != nil {
+					return 0, err
+				}
+				format = current.Format
+			}
+
+			ref := svc.opt.ContentRef(id.String())
+			meta, err := svc.store.PutObject(ctx, ref, content, format)
+			if err != nil {
+				return 0, err
+			}
+
+			params.Content = []byte{}
+			params.Checksum = meta.Checksum
+			params.Size = int32(meta.Size)
+			params.StorageBackend = meta.Backend
+			params.StorageBucket = meta.Bucket
+			params.StorageKey = meta.Key
+		}
 	}
 	if p.Tags != nil {
 		params.Tags = *p.Tags
@@ -324,14 +433,46 @@ func (svc *DatasetService) UpdateDatasetByUuid(ctx context.Context, id uuid.UUID
 		return 0, ie.ErrorNotFound
 	}
 
+	if svc.store != nil &&
+		previousRef.StorageBackend == DatasetStorageBackendS3 &&
+		previousRef.StorageBucket.Valid &&
+		previousRef.StorageKey.Valid &&
+		(params.StorageBackend != DatasetStorageBackendS3 ||
+			previousRef.StorageBucket.String != params.StorageBucket ||
+			previousRef.StorageKey.String != params.StorageKey) {
+		_ = svc.store.DeleteObject(ctx, DatasetObjectRef{
+			Backend: previousRef.StorageBackend,
+			Bucket:  previousRef.StorageBucket.String,
+			Key:     previousRef.StorageKey.String,
+		})
+	}
+
 	return count, nil
 }
 
 func (svc *DatasetService) DeleteDataset(ctx context.Context, id uuid.UUID) (int64, error) {
+	refRow, err := svc.q.GetDatasetObjectRefByUUID(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+
 	count, err := svc.q.DeleteDataset(ctx, id)
 	if err != nil {
 		return 0, err
 	}
 
+	if svc.store != nil && refRow.StorageBackend == DatasetStorageBackendS3 && refRow.StorageBucket.Valid && refRow.StorageKey.Valid {
+		_ = svc.store.DeleteObject(ctx, DatasetObjectRef{
+			Backend: refRow.StorageBackend,
+			Bucket:  refRow.StorageBucket.String,
+			Key:     refRow.StorageKey.String,
+		})
+	}
+
 	return count, nil
+}
+
+func checksumHex(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
 }

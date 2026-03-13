@@ -50,6 +50,23 @@ The `listen.host` parameter can be either IP or hostname.
 
 The `domainfile` parameter points to a YAML file with connection information to all databases.
 
+To store dataset payloads in an S3-compatible object store such as SeaweedFS while keeping metadata in PostgreSQL, add:
+
+```yaml
+dataset_storage:
+  backend: s3
+  s3:
+    endpoint: "http://seaweed-s3.internal:8333"
+    region: "us-east-1"
+    bucket: "selfhost-datasets"
+    access_key_id: "selfhost"
+    secret_access_key: "change-me"
+    force_path_style: true
+    key_prefix: "datasets"
+```
+
+With this enabled, dataset content and multipart dataset uploads are stored in the S3 backend, while PostgreSQL keeps the dataset metadata, object reference, checksum, and size.
+
 A typical `domains.yaml` file can look like this:
 
 ```yaml

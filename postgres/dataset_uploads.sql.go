@@ -12,29 +12,49 @@ import (
 )
 
 const createDatasetUpload = `-- name: CreateDatasetUpload :one
-INSERT INTO dataset_uploads (upload_id, dataset_uuid, created_by)
+INSERT INTO dataset_uploads (upload_id, dataset_uuid, created_by, storage_backend, storage_bucket, storage_key, backend_upload_id)
 VALUES (
 	$1,
 	$2,
-	$3
+	$3,
+	$4,
+	NULLIF($5::text, ''),
+	NULLIF($6::text, ''),
+	NULLIF($7::text, '')
 )
-RETURNING upload_id, dataset_uuid, created_by, created
+RETURNING upload_id, dataset_uuid, created_by, created, storage_backend, storage_bucket, storage_key, backend_upload_id
 `
 
 type CreateDatasetUploadParams struct {
-	UploadID    string
-	DatasetUuid uuid.UUID
-	CreatedBy   uuid.NullUUID
+	UploadID        string
+	DatasetUuid     uuid.UUID
+	CreatedBy       uuid.NullUUID
+	StorageBackend  string
+	StorageBucket   string
+	StorageKey      string
+	BackendUploadID string
 }
 
 func (q *Queries) CreateDatasetUpload(ctx context.Context, arg CreateDatasetUploadParams) (DatasetUpload, error) {
-	row := q.queryRow(ctx, q.createDatasetUploadStmt, createDatasetUpload, arg.UploadID, arg.DatasetUuid, arg.CreatedBy)
+	row := q.queryRow(ctx, q.createDatasetUploadStmt, createDatasetUpload,
+		arg.UploadID,
+		arg.DatasetUuid,
+		arg.CreatedBy,
+		arg.StorageBackend,
+		arg.StorageBucket,
+		arg.StorageKey,
+		arg.BackendUploadID,
+	)
 	var i DatasetUpload
 	err := row.Scan(
 		&i.UploadID,
 		&i.DatasetUuid,
 		&i.CreatedBy,
 		&i.Created,
+		&i.StorageBackend,
+		&i.StorageBucket,
+		&i.StorageKey,
+		&i.BackendUploadID,
 	)
 	return i, err
 }
@@ -53,7 +73,7 @@ func (q *Queries) DeleteDatasetUploadByID(ctx context.Context, uploadID string) 
 }
 
 const findDatasetUploadByID = `-- name: FindDatasetUploadByID :one
-SELECT upload_id, dataset_uuid, created_by, created
+SELECT upload_id, dataset_uuid, created_by, created, storage_backend, storage_bucket, storage_key, backend_upload_id
 FROM dataset_uploads
 WHERE upload_id = $1
 LIMIT 1
@@ -67,12 +87,16 @@ func (q *Queries) FindDatasetUploadByID(ctx context.Context, uploadID string) (D
 		&i.DatasetUuid,
 		&i.CreatedBy,
 		&i.Created,
+		&i.StorageBackend,
+		&i.StorageBucket,
+		&i.StorageKey,
+		&i.BackendUploadID,
 	)
 	return i, err
 }
 
 const findDatasetUploadParts = `-- name: FindDatasetUploadParts :many
-SELECT upload_id, part_number, size, checksum_md5, created
+SELECT upload_id, part_number, size, checksum_md5, created, etag
 FROM dataset_upload_parts
 WHERE upload_id = $1
 ORDER BY part_number ASC
@@ -93,6 +117,7 @@ func (q *Queries) FindDatasetUploadParts(ctx context.Context, uploadID string) (
 			&i.Size,
 			&i.ChecksumMd5,
 			&i.Created,
+			&i.Etag,
 		); err != nil {
 			return nil, err
 		}
@@ -108,17 +133,19 @@ func (q *Queries) FindDatasetUploadParts(ctx context.Context, uploadID string) (
 }
 
 const upsertDatasetUploadPart = `-- name: UpsertDatasetUploadPart :execrows
-INSERT INTO dataset_upload_parts (upload_id, part_number, size, checksum_md5)
+INSERT INTO dataset_upload_parts (upload_id, part_number, size, checksum_md5, etag)
 VALUES (
 	$1,
 	$2,
 	$3,
-	$4
+	$4,
+	NULLIF($5::text, '')
 )
 ON CONFLICT (upload_id, part_number) DO UPDATE
 SET
 	size = EXCLUDED.size,
 	checksum_md5 = EXCLUDED.checksum_md5,
+	etag = EXCLUDED.etag,
 	created = NOW()
 `
 
@@ -127,6 +154,7 @@ type UpsertDatasetUploadPartParams struct {
 	PartNumber  int32
 	Size        int32
 	ChecksumMd5 string
+	Etag        string
 }
 
 func (q *Queries) UpsertDatasetUploadPart(ctx context.Context, arg UpsertDatasetUploadPartParams) (int64, error) {
@@ -135,6 +163,7 @@ func (q *Queries) UpsertDatasetUploadPart(ctx context.Context, arg UpsertDataset
 		arg.PartNumber,
 		arg.Size,
 		arg.ChecksumMd5,
+		arg.Etag,
 	)
 	if err != nil {
 		return 0, err
