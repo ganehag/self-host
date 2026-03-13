@@ -30,6 +30,10 @@ func initConfig() {
 	viper.SetDefault("rate_control.req_per_hour", 600)
 	viper.SetDefault("rate_control.maxburst", 10)
 	viper.SetDefault("rate_control.cleanup", 3*time.Minute)
+	viper.SetDefault("db_pool.max_open_conns", 25)
+	viper.SetDefault("db_pool.max_idle_conns", 10)
+	viper.SetDefault("db_pool.conn_max_lifetime", 30*time.Minute)
+	viper.SetDefault("db_pool.conn_max_idle_time", 5*time.Minute)
 
 	// CORS default settings
 	viper.SetDefault("cors.allowed_origins", []string{"https://*", "http://*"})

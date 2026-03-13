@@ -156,8 +156,7 @@ WITH tsdata_trunc AS (
 	END AS ts
 	FROM tsdata
 	WHERE ts_uuid = ANY($4::uuid[])
-	AND ts BETWEEN ($5::timestamptz AT time zone $3::text)
-		AND ($6::timestamptz AT time zone $3::text)
+	AND ts BETWEEN $5 AND $6
 )
 SELECT
         ts_uuid::uuid,

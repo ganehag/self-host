@@ -8,3 +8,9 @@ rate_control:
   req_per_hour: 10000000
   maxburst: 100000
   cleanup: "20minutes"
+
+db_pool:
+  max_open_conns: 64
+  max_idle_conns: 32
+  conn_max_lifetime: "30m"
+  conn_max_idle_time: "5m"

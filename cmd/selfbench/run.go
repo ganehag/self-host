@@ -80,6 +80,7 @@ var (
 	runConfigPath string
 	runManifest   string
 	runPGURI      string
+	lastNowNano   int64
 )
 
 var runCmd = &cobra.Command{
@@ -222,10 +223,10 @@ func compileOperations(cfg *RunConfig, manifest *Manifest) ([]compiledOperation,
 			return ""
 		},
 		"nowRFC3339Nano": func() string {
-			return time.Now().UTC().Format(time.RFC3339Nano)
+			return uniqueNowUTC().Format(time.RFC3339Nano)
 		},
 		"nowUnixMilli": func() int64 {
-			return time.Now().UTC().UnixMilli()
+			return uniqueNowUTC().UnixMilli()
 		},
 	}
 
@@ -504,6 +505,20 @@ func updateMax(target *int64, candidate int64) {
 		}
 		if atomic.CompareAndSwapInt64(target, current, candidate) {
 			return
+		}
+	}
+}
+
+func uniqueNowUTC() time.Time {
+	for {
+		now := time.Now().UTC().UnixNano()
+		now -= now % int64(time.Microsecond)
+		last := atomic.LoadInt64(&lastNowNano)
+		if now <= last {
+			now = last + int64(time.Microsecond)
+		}
+		if atomic.CompareAndSwapInt64(&lastNowNano, last, now) {
+			return time.Unix(0, now).UTC()
 		}
 	}
 }

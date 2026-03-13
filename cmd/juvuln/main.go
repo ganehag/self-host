@@ -39,6 +39,10 @@ func main() {
 	viper.AddConfigPath(".")
 
 	viper.SetDefault("worker.timeout", 30*time.Second)
+	viper.SetDefault("db_pool.max_open_conns", 25)
+	viper.SetDefault("db_pool.max_idle_conns", 10)
+	viper.SetDefault("db_pool.conn_max_lifetime", 30*time.Minute)
+	viper.SetDefault("db_pool.conn_max_idle_time", 5*time.Minute)
 
 	err := viper.ReadInConfig()
 	if err != nil {

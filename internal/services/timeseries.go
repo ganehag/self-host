@@ -7,7 +7,9 @@ package services
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,12 +22,7 @@ import (
 	units "github.com/ganehag/go-units"
 )
 
-const insertDataToTimeseries = `
-INSERT INTO tsdata(ts_uuid, value, ts, created_by)
-SELECT $1::uuid, x.v, x.ts, $2::uuid
-FROM
-json_to_recordset($3::json) AS x("v" double precision, "ts" timestamptz);
-`
+const insertTimeseriesBatchSize = 256
 
 // NewTimeseries defines model for NewTimeseries.
 type NewTimeseriesParams struct {
@@ -174,7 +171,7 @@ func (svc *TimeseriesService) AddDataToTimeseries(ctx context.Context, p AddData
 		return 0, err
 	}
 
-	filteredPoints := make([]*DataPoint, 0)
+	filteredPoints := make([]DataPoint, 0, len(p.Points))
 
 	var fromUnit units.Unit
 	var toUnit units.Unit
@@ -228,25 +225,28 @@ func (svc *TimeseriesService) AddDataToTimeseries(ctx context.Context, p AddData
 			}
 		}
 
-		filteredPoints = append(filteredPoints, &pItem)
+		filteredPoints = append(filteredPoints, pItem)
 	}
 
-	data, err := json.Marshal(filteredPoints)
-	if err != nil {
-		return 0, err
+	if len(filteredPoints) == 0 {
+		return 0, nil
 	}
 
-	result, err := svc.db.ExecContext(ctx, insertDataToTimeseries, p.Uuid, p.CreatedBy, data)
-	if err != nil {
-		return 0, err
+	var totalCount int64
+	for start := 0; start < len(filteredPoints); start += insertTimeseriesBatchSize {
+		stop := start + insertTimeseriesBatchSize
+		if stop > len(filteredPoints) {
+			stop = len(filteredPoints)
+		}
+
+		count, err := insertTimeseriesBatch(ctx, svc.db, p.Uuid, p.CreatedBy, filteredPoints[start:stop])
+		if err != nil {
+			return 0, err
+		}
+		totalCount += count
 	}
 
-	count, err := result.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-
-	return count, nil
+	return totalCount, nil
 }
 
 func (svc *TimeseriesService) FindByTags(ctx context.Context, p FindByTagsParams) ([]*rest.Timeseries, error) {
@@ -478,47 +478,16 @@ func (svc *TimeseriesService) QuerySingleSourceData(ctx context.Context, p Query
 	}
 
 	if shouldAggregateData(p.Aggregate, p.Precision) {
-		params := postgres.GetTsDataRangeAggParams{
-			Aggregate: p.Aggregate,
-			Truncate:  p.Precision,
-			Timezone:  p.Timezone,
-			TsUuids: []uuid.UUID{
-				p.Uuid, // Expects a list of time series
-			},
-			Start: p.Start,
-			Stop:  p.End,
-		}
-
-		dataList, err := svc.q.GetTsDataRangeAgg(ctx, params)
+		dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+			TsUuids: []uuid.UUID{p.Uuid},
+			Start:   p.Start,
+			Stop:    p.End,
+		})
 		if err != nil {
 			return nil, err
 		}
 
-		for _, item := range dataList {
-			var f float32
-			if p.Unit != nil {
-				v := units.NewValue(item.Value, fromUnit)
-				conv, err := v.Convert(toUnit)
-				if err != nil {
-					return nil, ie.ErrorInvalidUnitConversion
-				}
-				f = float32(conv.Float())
-			} else {
-				f = float32(item.Value)
-			}
-
-			if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
-				continue
-			}
-
-			d := rest.TsRow{
-				V:  f,
-				Ts: item.Ts.In(tzloc),
-			}
-			tsdata = append(tsdata, &d)
-		}
-
-		return tsdata, nil
+		return aggregateSingleSourceRows(dataList, p, tzloc, fromUnit, toUnit)
 	}
 
 	dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
@@ -647,6 +616,191 @@ func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryM
 
 func shouldAggregateData(aggregate, precision string) bool {
 	return strings.TrimSpace(precision) != "" && strings.TrimSpace(aggregate) != ""
+}
+
+func insertTimeseriesBatch(ctx context.Context, db *sql.DB, tsUUID, createdBy uuid.UUID, points []DataPoint) (int64, error) {
+	var query strings.Builder
+	args := make([]any, 0, len(points)*4)
+
+	query.WriteString("INSERT INTO tsdata(ts_uuid, value, ts, created_by) VALUES ")
+	for i, point := range points {
+		if i > 0 {
+			query.WriteString(",")
+		}
+
+		base := i*4 + 1
+		query.WriteString("(")
+		query.WriteString("$")
+		query.WriteString(strconv.Itoa(base))
+		query.WriteString(",$")
+		query.WriteString(strconv.Itoa(base + 1))
+		query.WriteString(",$")
+		query.WriteString(strconv.Itoa(base + 2))
+		query.WriteString(",$")
+		query.WriteString(strconv.Itoa(base + 3))
+		query.WriteString(")")
+
+		args = append(args, tsUUID, point.Value, point.Timestamp, createdBy)
+	}
+
+	result, err := db.ExecContext(ctx, query.String(), args...)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.RowsAffected()
+}
+
+type aggregateBucket struct {
+	ts    time.Time
+	count int64
+	sum   float64
+	min   float64
+	max   float64
+}
+
+func aggregateSingleSourceRows(rows []postgres.GetTsDataRangeRow, p QuerySingleSourceDataParams, tzloc *time.Location, fromUnit, toUnit units.Unit) ([]*rest.TsRow, error) {
+	buckets := make(map[time.Time]*aggregateBucket, len(rows))
+	keys := make([]time.Time, 0, len(rows))
+
+	for _, item := range rows {
+		bucketTs, err := truncateTime(item.Ts, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+
+		bucket := buckets[bucketTs]
+		if bucket == nil {
+			bucket = &aggregateBucket{
+				ts:  bucketTs,
+				min: item.Value,
+				max: item.Value,
+			}
+			buckets[bucketTs] = bucket
+			keys = append(keys, bucketTs)
+		}
+
+		bucket.count++
+		bucket.sum += item.Value
+		if item.Value < bucket.min {
+			bucket.min = item.Value
+		}
+		if item.Value > bucket.max {
+			bucket.max = item.Value
+		}
+	}
+
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].Before(keys[j])
+	})
+
+	result := make([]*rest.TsRow, 0, len(keys))
+	for _, key := range keys {
+		bucket := buckets[key]
+		value, err := aggregateBucketValue(bucket, p.Aggregate)
+		if err != nil {
+			return nil, err
+		}
+
+		var f float32
+		if p.Unit != nil {
+			v := units.NewValue(value, fromUnit)
+			conv, err := v.Convert(toUnit)
+			if err != nil {
+				return nil, ie.ErrorInvalidUnitConversion
+			}
+			f = float32(conv.Float())
+		} else {
+			f = float32(value)
+		}
+
+		if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+			continue
+		}
+
+		result = append(result, &rest.TsRow{
+			V:  f,
+			Ts: bucket.ts.In(tzloc),
+		})
+	}
+
+	return result, nil
+}
+
+func aggregateBucketValue(bucket *aggregateBucket, aggregate string) (float64, error) {
+	switch aggregate {
+	case "avg":
+		if bucket.count == 0 {
+			return 0, nil
+		}
+		return bucket.sum / float64(bucket.count), nil
+	case "min":
+		return bucket.min, nil
+	case "max":
+		return bucket.max, nil
+	case "count":
+		return float64(bucket.count), nil
+	case "sum":
+		return bucket.sum, nil
+	default:
+		return 0, ie.NewInvalidRequestError(fmt.Errorf("unsupported aggregate %q", aggregate))
+	}
+}
+
+func truncateTime(ts time.Time, precision string, loc *time.Location) (time.Time, error) {
+	local := ts.In(loc)
+
+	switch precision {
+	case "microseconds":
+		return local.Truncate(time.Microsecond), nil
+	case "milliseconds":
+		return local.Truncate(time.Millisecond), nil
+	case "second":
+		return local.Truncate(time.Second), nil
+	case "minute":
+		return local.Truncate(time.Minute), nil
+	case "minute5":
+		return truncateByMinuteStep(local, 5), nil
+	case "minute10":
+		return truncateByMinuteStep(local, 10), nil
+	case "minute15":
+		return truncateByMinuteStep(local, 15), nil
+	case "minute20":
+		return truncateByMinuteStep(local, 20), nil
+	case "minute30":
+		return truncateByMinuteStep(local, 30), nil
+	case "hour":
+		return local.Truncate(time.Hour), nil
+	case "day":
+		return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc), nil
+	case "week":
+		return truncateWeek(local), nil
+	case "month":
+		return time.Date(local.Year(), local.Month(), 1, 0, 0, 0, 0, loc), nil
+	case "year":
+		return time.Date(local.Year(), time.January, 1, 0, 0, 0, 0, loc), nil
+	case "decade":
+		return time.Date((local.Year()/10)*10, time.January, 1, 0, 0, 0, 0, loc), nil
+	case "century":
+		return time.Date(((local.Year()-1)/100)*100+1, time.January, 1, 0, 0, 0, 0, loc), nil
+	case "millennia":
+		return time.Date(((local.Year()-1)/1000)*1000+1, time.January, 1, 0, 0, 0, 0, loc), nil
+	default:
+		return time.Time{}, ie.NewInvalidRequestError(fmt.Errorf("unsupported precision %q", precision))
+	}
+}
+
+func truncateByMinuteStep(ts time.Time, step int) time.Time {
+	return time.Date(ts.Year(), ts.Month(), ts.Day(), ts.Hour(), (ts.Minute()/step)*step, 0, 0, ts.Location())
+}
+
+func truncateWeek(ts time.Time) time.Time {
+	weekday := int(ts.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	start := ts.AddDate(0, 0, -(weekday - 1))
+	return time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, ts.Location())
 }
 
 type UpdateTimeseriesParams struct {

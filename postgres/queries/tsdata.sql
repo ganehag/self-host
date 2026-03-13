@@ -28,8 +28,7 @@ WITH tsdata_trunc AS (
 	END AS ts
 	FROM tsdata
 	WHERE ts_uuid = ANY(sqlc.arg(ts_uuids)::uuid[])
-	AND ts BETWEEN (sqlc.arg(start)::timestamptz AT time zone sqlc.arg(timezone)::text)
-		AND (sqlc.arg(stop)::timestamptz AT time zone sqlc.arg(timezone)::text)
+	AND ts BETWEEN sqlc.arg(start) AND sqlc.arg(stop)
 )
 SELECT
         ts_uuid::uuid,

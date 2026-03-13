@@ -17,11 +17,30 @@ WITH usr AS (
 	FROM user_tokens
 	WHERE user_tokens.token_hash = sha256($3)
 	LIMIT 1
-) SELECT COALESCE((SELECT user_has_access(
-	usr.uuid,
-	$1::policy_action,
-	$2::TEXT
-) FROM usr LIMIT 1), false)::boolean AS access
+)
+SELECT COALESCE((
+	SELECT
+		EXISTS (
+			SELECT 1
+			FROM user_groups
+			INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+			WHERE user_groups.user_uuid = usr.uuid
+			AND group_policies.action = $1::policy_action
+			AND group_policies.effect = 'allow'
+			AND $2::TEXT LIKE group_policies.resource
+		)
+		AND NOT EXISTS (
+			SELECT 1
+			FROM user_groups
+			INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+			WHERE user_groups.user_uuid = usr.uuid
+			AND group_policies.action = $1::policy_action
+			AND group_policies.effect = 'deny'
+			AND $2::TEXT LIKE group_policies.resource
+		)
+	FROM usr
+	LIMIT 1
+), false)::boolean AS access
 `
 
 type CheckUserTokenHasAccessParams struct {
@@ -51,7 +70,26 @@ WITH usr AS (
 	FROM usr
 )
 SELECT
-	COALESCE(true = ALL (array_agg(user_has_access(usr_r.uuid, usr_r.action, usr_r.resource))), false)::boolean AS access
+	COALESCE(bool_and(
+		EXISTS (
+			SELECT 1
+			FROM user_groups
+			INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+			WHERE user_groups.user_uuid = usr_r.uuid
+			AND group_policies.action = usr_r.action
+			AND group_policies.effect = 'allow'
+			AND usr_r.resource LIKE group_policies.resource
+		)
+		AND NOT EXISTS (
+			SELECT 1
+			FROM user_groups
+			INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+			WHERE user_groups.user_uuid = usr_r.uuid
+			AND group_policies.action = usr_r.action
+			AND group_policies.effect = 'deny'
+			AND usr_r.resource LIKE group_policies.resource
+		)
+	), false)::boolean AS access
 FROM usr_r
 `
 
