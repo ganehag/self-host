@@ -51,6 +51,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.createDatasetStmt, err = db.PrepareContext(ctx, createDataset); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateDataset: %w", err)
 	}
+	if q.createDatasetUploadStmt, err = db.PrepareContext(ctx, createDatasetUpload); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateDatasetUpload: %w", err)
+	}
 	if q.createGroupStmt, err = db.PrepareContext(ctx, createGroup); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateGroup: %w", err)
 	}
@@ -83,6 +86,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.deleteDatasetStmt, err = db.PrepareContext(ctx, deleteDataset); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteDataset: %w", err)
+	}
+	if q.deleteDatasetUploadByIDStmt, err = db.PrepareContext(ctx, deleteDatasetUploadByID); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteDatasetUploadByID: %w", err)
 	}
 	if q.deleteGroupStmt, err = db.PrepareContext(ctx, deleteGroup); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteGroup: %w", err)
@@ -152,6 +158,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.findDatasetByUUIDStmt, err = db.PrepareContext(ctx, findDatasetByUUID); err != nil {
 		return nil, fmt.Errorf("error preparing query FindDatasetByUUID: %w", err)
+	}
+	if q.findDatasetUploadByIDStmt, err = db.PrepareContext(ctx, findDatasetUploadByID); err != nil {
+		return nil, fmt.Errorf("error preparing query FindDatasetUploadByID: %w", err)
+	}
+	if q.findDatasetUploadPartsStmt, err = db.PrepareContext(ctx, findDatasetUploadParts); err != nil {
+		return nil, fmt.Errorf("error preparing query FindDatasetUploadParts: %w", err)
 	}
 	if q.findDatasetsStmt, err = db.PrepareContext(ctx, findDatasets); err != nil {
 		return nil, fmt.Errorf("error preparing query FindDatasets: %w", err)
@@ -369,6 +381,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.updateProgramByUUIDStmt, err = db.PrepareContext(ctx, updateProgramByUUID); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateProgramByUUID: %w", err)
 	}
+	if q.upsertDatasetUploadPartStmt, err = db.PrepareContext(ctx, upsertDatasetUploadPart); err != nil {
+		return nil, fmt.Errorf("error preparing query UpsertDatasetUploadPart: %w", err)
+	}
 	return &q, nil
 }
 
@@ -417,6 +432,11 @@ func (q *Queries) Close() error {
 	if q.createDatasetStmt != nil {
 		if cerr := q.createDatasetStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing createDatasetStmt: %w", cerr)
+		}
+	}
+	if q.createDatasetUploadStmt != nil {
+		if cerr := q.createDatasetUploadStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createDatasetUploadStmt: %w", cerr)
 		}
 	}
 	if q.createGroupStmt != nil {
@@ -472,6 +492,11 @@ func (q *Queries) Close() error {
 	if q.deleteDatasetStmt != nil {
 		if cerr := q.deleteDatasetStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteDatasetStmt: %w", cerr)
+		}
+	}
+	if q.deleteDatasetUploadByIDStmt != nil {
+		if cerr := q.deleteDatasetUploadByIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteDatasetUploadByIDStmt: %w", cerr)
 		}
 	}
 	if q.deleteGroupStmt != nil {
@@ -587,6 +612,16 @@ func (q *Queries) Close() error {
 	if q.findDatasetByUUIDStmt != nil {
 		if cerr := q.findDatasetByUUIDStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing findDatasetByUUIDStmt: %w", cerr)
+		}
+	}
+	if q.findDatasetUploadByIDStmt != nil {
+		if cerr := q.findDatasetUploadByIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing findDatasetUploadByIDStmt: %w", cerr)
+		}
+	}
+	if q.findDatasetUploadPartsStmt != nil {
+		if cerr := q.findDatasetUploadPartsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing findDatasetUploadPartsStmt: %w", cerr)
 		}
 	}
 	if q.findDatasetsStmt != nil {
@@ -949,6 +984,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing updateProgramByUUIDStmt: %w", cerr)
 		}
 	}
+	if q.upsertDatasetUploadPartStmt != nil {
+		if cerr := q.upsertDatasetUploadPartStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing upsertDatasetUploadPartStmt: %w", cerr)
+		}
+	}
 	return err
 }
 
@@ -997,6 +1037,7 @@ type Queries struct {
 	createAlertStmt                    *sql.Stmt
 	createCodeRevisionStmt             *sql.Stmt
 	createDatasetStmt                  *sql.Stmt
+	createDatasetUploadStmt            *sql.Stmt
 	createGroupStmt                    *sql.Stmt
 	createPolicyStmt                   *sql.Stmt
 	createProgramStmt                  *sql.Stmt
@@ -1008,6 +1049,7 @@ type Queries struct {
 	deleteAlertStmt                    *sql.Stmt
 	deleteAllTsDataStmt                *sql.Stmt
 	deleteDatasetStmt                  *sql.Stmt
+	deleteDatasetUploadByIDStmt        *sql.Stmt
 	deleteGroupStmt                    *sql.Stmt
 	deletePolicyByUUIDStmt             *sql.Stmt
 	deleteProgramStmt                  *sql.Stmt
@@ -1031,6 +1073,8 @@ type Queries struct {
 	findAllRoutineRevisionsStmt        *sql.Stmt
 	findDatasetByThingStmt             *sql.Stmt
 	findDatasetByUUIDStmt              *sql.Stmt
+	findDatasetUploadByIDStmt          *sql.Stmt
+	findDatasetUploadPartsStmt         *sql.Stmt
 	findDatasetsStmt                   *sql.Stmt
 	findDatasetsByTagsStmt             *sql.Stmt
 	findGroupByUuidStmt                *sql.Stmt
@@ -1103,6 +1147,7 @@ type Queries struct {
 	updateAlertSetValueStmt            *sql.Stmt
 	updateDatasetByUUIDStmt            *sql.Stmt
 	updateProgramByUUIDStmt            *sql.Stmt
+	upsertDatasetUploadPartStmt        *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
@@ -1118,6 +1163,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		createAlertStmt:                    q.createAlertStmt,
 		createCodeRevisionStmt:             q.createCodeRevisionStmt,
 		createDatasetStmt:                  q.createDatasetStmt,
+		createDatasetUploadStmt:            q.createDatasetUploadStmt,
 		createGroupStmt:                    q.createGroupStmt,
 		createPolicyStmt:                   q.createPolicyStmt,
 		createProgramStmt:                  q.createProgramStmt,
@@ -1129,6 +1175,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		deleteAlertStmt:                    q.deleteAlertStmt,
 		deleteAllTsDataStmt:                q.deleteAllTsDataStmt,
 		deleteDatasetStmt:                  q.deleteDatasetStmt,
+		deleteDatasetUploadByIDStmt:        q.deleteDatasetUploadByIDStmt,
 		deleteGroupStmt:                    q.deleteGroupStmt,
 		deletePolicyByUUIDStmt:             q.deletePolicyByUUIDStmt,
 		deleteProgramStmt:                  q.deleteProgramStmt,
@@ -1152,6 +1199,8 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		findAllRoutineRevisionsStmt:        q.findAllRoutineRevisionsStmt,
 		findDatasetByThingStmt:             q.findDatasetByThingStmt,
 		findDatasetByUUIDStmt:              q.findDatasetByUUIDStmt,
+		findDatasetUploadByIDStmt:          q.findDatasetUploadByIDStmt,
+		findDatasetUploadPartsStmt:         q.findDatasetUploadPartsStmt,
 		findDatasetsStmt:                   q.findDatasetsStmt,
 		findDatasetsByTagsStmt:             q.findDatasetsByTagsStmt,
 		findGroupByUuidStmt:                q.findGroupByUuidStmt,
@@ -1224,5 +1273,6 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		updateAlertSetValueStmt:            q.updateAlertSetValueStmt,
 		updateDatasetByUUIDStmt:            q.updateDatasetByUUIDStmt,
 		updateProgramByUUIDStmt:            q.updateProgramByUUIDStmt,
+		upsertDatasetUploadPartStmt:        q.upsertDatasetUploadPartStmt,
 	}
 }

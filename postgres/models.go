@@ -316,6 +316,21 @@ type Dataset struct {
 	Tags      []string
 }
 
+type DatasetUpload struct {
+	UploadID    string
+	DatasetUuid uuid.UUID
+	CreatedBy   uuid.NullUUID
+	Created     time.Time
+}
+
+type DatasetUploadPart struct {
+	UploadID    string
+	PartNumber  int32
+	Size        int32
+	ChecksumMd5 string
+	Created     time.Time
+}
+
 type Group struct {
 	Uuid uuid.UUID
 	Name string

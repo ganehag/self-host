@@ -14,6 +14,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/self-host/self-host/internal/services"
 )
 
 // Error struct
@@ -46,4 +47,13 @@ func (ra *RestApi) GetUserUUID(r *http.Request) (uuid.UUID, error) {
 	}
 
 	return userUUID, nil
+}
+
+func (ra *RestApi) GetDomainToken(r *http.Request) (*services.DomainToken, error) {
+	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
+	if ok == false {
+		return nil, errors.New("domain token missing from context")
+	}
+
+	return domaintoken, nil
 }
