@@ -61,16 +61,13 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 		return
 	}
 
-	// Ensure all timeseries exists
-	for _, id := range uuids {
-		ok, err := svc.Exists(r.Context(), id)
-		if err != nil {
-			ie.SendHTTPError(w, ie.ParseDBError(err))
-			return
-		} else if ok == false {
-			ie.SendHTTPError(w, ie.ErrorNotFound)
-			return
-		}
+	ok, err = svc.ExistAll(r.Context(), uuids)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	} else if ok == false {
+		ie.SendHTTPError(w, ie.ErrorNotFound)
+		return
 	}
 
 	// Generate check rules for access control

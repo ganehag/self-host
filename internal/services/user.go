@@ -81,11 +81,6 @@ func (u *UserService) AddUser(ctx context.Context, name string) (*rest.User, err
 }
 
 func (u *UserService) AddTokenToUser(ctx context.Context, userUUID uuid.UUID, label string) (*rest.TokenWithSecret, error) {
-	exists, err := u.Exists(ctx, userUUID)
-	if exists == false {
-		return nil, ie.ErrorNotFound
-	}
-
 	secret := "secret-token." + RandomString(secretTokenLength)
 
 	params := postgres.AddTokenToUserParams{
@@ -171,22 +166,14 @@ func (u *UserService) AddUserToGroups(ctx context.Context, userUUID uuid.UUID, g
 }
 
 func (u *UserService) FindUserByUuid(ctx context.Context, userUUID uuid.UUID) (*rest.User, error) {
-	user, err := u.q.FindUserByUUID(ctx, userUUID)
-	if err != nil {
-		return nil, err
-	}
-
-	ugs, err := u.q.FindGroupsByUser(ctx, user.Uuid)
+	user, err := u.q.FindUserWithGroupsByUUID(ctx, userUUID)
 	if err != nil {
 		return nil, err
 	}
 
 	userGroups := make([]rest.Group, 0)
-	for _, item := range ugs {
-		userGroups = append(userGroups, rest.Group{
-			Uuid: item.Uuid.String(),
-			Name: item.Name,
-		})
+	if err := json.Unmarshal([]byte(user.Groups), &userGroups); err != nil {
+		// FIXME: log error
 	}
 
 	return &rest.User{
@@ -243,16 +230,15 @@ func (u *UserService) FindAll(ctx context.Context, token []byte, limit *int64, o
 func (u *UserService) FindTokensForUser(ctx context.Context, userUUID uuid.UUID) ([]*rest.Token, error) {
 	tokens := make([]*rest.Token, 0)
 
-	count, err := u.q.ExistsUser(ctx, userUUID)
-	if err != nil {
-		return nil, err
-	} else if count == 0 {
-		return nil, ie.ErrorNotFound
-	}
-
 	tokenList, err := u.q.FindTokensByUser(ctx, userUUID)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(tokenList) == 0 {
+		if _, err := u.q.FindUserByUUID(ctx, userUUID); err != nil {
+			return nil, err
+		}
 	}
 
 	for _, v := range tokenList {

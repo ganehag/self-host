@@ -46,7 +46,9 @@ SELECT * FROM usr;
 
 -- name: AddTokenToUser :one
 INSERT INTO user_tokens(user_uuid, name, token_hash)
-VALUES (sqlc.arg(user_uuid), sqlc.arg(name), sha256(sqlc.arg(secret)))
+SELECT users.uuid, sqlc.arg(name), sha256(sqlc.arg(secret))
+FROM users
+WHERE users.uuid = sqlc.arg(user_uuid)
 RETURNING *;
 
 -- name: FindUsers :many
@@ -90,6 +92,19 @@ FROM partial_users;
 
 -- name: FindUserByUUID :one
 SELECT *
+FROM users
+WHERE users.uuid = sqlc.arg(uuid)
+LIMIT 1;
+
+-- name: FindUserWithGroupsByUUID :one
+SELECT
+	users.*,
+	(COALESCE((
+		SELECT json_agg(json_build_object('uuid', groups.uuid, 'name', groups.name))
+		FROM user_groups
+		INNER JOIN groups ON groups.uuid = user_groups.group_uuid
+		WHERE users.uuid = user_groups.user_uuid
+	), '[]')::text) AS groups
 FROM users
 WHERE users.uuid = sqlc.arg(uuid)
 LIMIT 1;

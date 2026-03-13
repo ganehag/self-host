@@ -3,6 +3,11 @@ SELECT COUNT(*) AS count
 FROM timeseries
 WHERE timeseries.uuid = sqlc.arg(uuid);
 
+-- name: CountExistingTimeseries :one
+SELECT COUNT(*) AS count
+FROM timeseries
+WHERE timeseries.uuid = ANY(sqlc.arg(uuids)::uuid[]);
+
 -- name: CreateTimeseries :one
 WITH t AS (
 	INSERT INTO timeseries(

@@ -36,6 +36,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.checkUserTokenHasAccessManyStmt, err = db.PrepareContext(ctx, checkUserTokenHasAccessMany); err != nil {
 		return nil, fmt.Errorf("error preparing query CheckUserTokenHasAccessMany: %w", err)
 	}
+	if q.countExistingTimeseriesStmt, err = db.PrepareContext(ctx, countExistingTimeseries); err != nil {
+		return nil, fmt.Errorf("error preparing query CountExistingTimeseries: %w", err)
+	}
 	if q.createAlertStmt, err = db.PrepareContext(ctx, createAlert); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateAlert: %w", err)
 	}
@@ -212,6 +215,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.findUserByUUIDStmt, err = db.PrepareContext(ctx, findUserByUUID); err != nil {
 		return nil, fmt.Errorf("error preparing query FindUserByUUID: %w", err)
+	}
+	if q.findUserWithGroupsByUUIDStmt, err = db.PrepareContext(ctx, findUserWithGroupsByUUID); err != nil {
+		return nil, fmt.Errorf("error preparing query FindUserWithGroupsByUUID: %w", err)
 	}
 	if q.findUsersStmt, err = db.PrepareContext(ctx, findUsers); err != nil {
 		return nil, fmt.Errorf("error preparing query FindUsers: %w", err)
@@ -410,6 +416,11 @@ func (q *Queries) Close() error {
 	if q.checkUserTokenHasAccessManyStmt != nil {
 		if cerr := q.checkUserTokenHasAccessManyStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing checkUserTokenHasAccessManyStmt: %w", cerr)
+		}
+	}
+	if q.countExistingTimeseriesStmt != nil {
+		if cerr := q.countExistingTimeseriesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing countExistingTimeseriesStmt: %w", cerr)
 		}
 	}
 	if q.createAlertStmt != nil {
@@ -705,6 +716,11 @@ func (q *Queries) Close() error {
 	if q.findUserByUUIDStmt != nil {
 		if cerr := q.findUserByUUIDStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing findUserByUUIDStmt: %w", cerr)
+		}
+	}
+	if q.findUserWithGroupsByUUIDStmt != nil {
+		if cerr := q.findUserWithGroupsByUUIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing findUserWithGroupsByUUIDStmt: %w", cerr)
 		}
 	}
 	if q.findUsersStmt != nil {
@@ -1040,6 +1056,7 @@ type Queries struct {
 	addUserToGroupStmt                 *sql.Stmt
 	checkUserTokenHasAccessStmt        *sql.Stmt
 	checkUserTokenHasAccessManyStmt    *sql.Stmt
+	countExistingTimeseriesStmt        *sql.Stmt
 	createAlertStmt                    *sql.Stmt
 	createCodeRevisionStmt             *sql.Stmt
 	createDatasetStmt                  *sql.Stmt
@@ -1099,6 +1116,7 @@ type Queries struct {
 	findTimeseriesByUUIDStmt           *sql.Stmt
 	findTokensByUserStmt               *sql.Stmt
 	findUserByUUIDStmt                 *sql.Stmt
+	findUserWithGroupsByUUIDStmt       *sql.Stmt
 	findUsersStmt                      *sql.Stmt
 	getDatasetContentByUUIDStmt        *sql.Stmt
 	getNamedModuleCodeAtHeadStmt       *sql.Stmt
@@ -1167,6 +1185,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		addUserToGroupStmt:                 q.addUserToGroupStmt,
 		checkUserTokenHasAccessStmt:        q.checkUserTokenHasAccessStmt,
 		checkUserTokenHasAccessManyStmt:    q.checkUserTokenHasAccessManyStmt,
+		countExistingTimeseriesStmt:        q.countExistingTimeseriesStmt,
 		createAlertStmt:                    q.createAlertStmt,
 		createCodeRevisionStmt:             q.createCodeRevisionStmt,
 		createDatasetStmt:                  q.createDatasetStmt,
@@ -1226,6 +1245,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		findTimeseriesByUUIDStmt:           q.findTimeseriesByUUIDStmt,
 		findTokensByUserStmt:               q.findTokensByUserStmt,
 		findUserByUUIDStmt:                 q.findUserByUUIDStmt,
+		findUserWithGroupsByUUIDStmt:       q.findUserWithGroupsByUUIDStmt,
 		findUsersStmt:                      q.findUsersStmt,
 		getDatasetContentByUUIDStmt:        q.getDatasetContentByUUIDStmt,
 		getNamedModuleCodeAtHeadStmt:       q.getNamedModuleCodeAtHeadStmt,

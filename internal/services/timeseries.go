@@ -95,6 +95,19 @@ func (svc *TimeseriesService) Exists(ctx context.Context, id uuid.UUID) (bool, e
 	return found > 0, nil
 }
 
+func (svc *TimeseriesService) ExistAll(ctx context.Context, ids []uuid.UUID) (bool, error) {
+	if len(ids) == 0 {
+		return true, nil
+	}
+
+	count, err := svc.q.CountExistingTimeseries(ctx, ids)
+	if err != nil {
+		return false, err
+	}
+
+	return count == int64(len(ids)), nil
+}
+
 func (svc *TimeseriesService) AddTimeseries(ctx context.Context, opt *NewTimeseriesParams) (*rest.Timeseries, error) {
 	// Use a transaction for this action
 	tx, err := svc.db.BeginTx(ctx, &sql.TxOptions{})
@@ -303,16 +316,18 @@ func (svc *TimeseriesService) FindByTags(ctx context.Context, p FindByTagsParams
 func (svc *TimeseriesService) FindByThing(ctx context.Context, thing uuid.UUID) ([]*rest.Timeseries, error) {
 	timeseries := make([]*rest.Timeseries, 0)
 
-	count, err := svc.q.ExistsThing(ctx, thing)
-	if err != nil {
-		return nil, err
-	} else if count == 0 {
-		return nil, ie.ErrorNotFound
-	}
-
 	tsList, err := svc.q.FindTimeseriesByThing(ctx, nullableUUIDValue(thing))
 	if err != nil {
 		return nil, err
+	}
+
+	if len(tsList) == 0 {
+		count, err := svc.q.ExistsThing(ctx, thing)
+		if err != nil {
+			return nil, err
+		} else if count == 0 {
+			return nil, ie.ErrorNotFound
+		}
 	}
 
 	for _, item := range tsList {
@@ -486,8 +501,16 @@ func (svc *TimeseriesService) QuerySingleSourceData(ctx context.Context, p Query
 		if err != nil {
 			return nil, err
 		}
-
-		return aggregateSingleSourceRows(dataList, p, tzloc, fromUnit, toUnit)
+		result, err := aggregateSingleSourceRows(dataList, p, tzloc, fromUnit, toUnit)
+		if err != nil {
+			return nil, err
+		}
+		if len(result) == 0 {
+			if _, err := svc.q.FindTimeseriesByUUID(ctx, p.Uuid); err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
 	}
 
 	dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
@@ -521,6 +544,12 @@ func (svc *TimeseriesService) QuerySingleSourceData(ctx context.Context, p Query
 			Ts: item.Ts.In(tzloc),
 		}
 		tsdata = append(tsdata, &d)
+	}
+
+	if len(tsdata) == 0 {
+		if _, err := svc.q.FindTimeseriesByUUID(ctx, p.Uuid); err != nil {
+			return nil, err
+		}
 	}
 
 	return tsdata, nil

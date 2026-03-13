@@ -13,6 +13,19 @@ import (
 	"github.com/lib/pq"
 )
 
+const countExistingTimeseries = `-- name: CountExistingTimeseries :one
+SELECT COUNT(*) AS count
+FROM timeseries
+WHERE timeseries.uuid = ANY($1::uuid[])
+`
+
+func (q *Queries) CountExistingTimeseries(ctx context.Context, uuids []uuid.UUID) (int64, error) {
+	row := q.queryRow(ctx, q.countExistingTimeseriesStmt, countExistingTimeseries, pq.Array(uuids))
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createTimeseries = `-- name: CreateTimeseries :one
 WITH t AS (
 	INSERT INTO timeseries(

@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/self-host/self-host/api/aapije/rest"
-	ie "github.com/self-host/self-host/internal/errors"
 	"github.com/self-host/self-host/postgres"
 )
 
@@ -62,13 +61,6 @@ func (u *GroupService) AddGroup(ctx context.Context, name string) (*rest.Group, 
 }
 
 func (u *GroupService) FindGroupByUuid(ctx context.Context, groupUUID uuid.UUID) (*rest.Group, error) {
-	found, err := u.Exists(ctx, groupUUID)
-	if err != nil {
-		return nil, err
-	} else if found == false {
-		return nil, ie.ErrorNotFound
-	}
-
 	group, err := u.q.FindGroupByUuid(ctx, groupUUID)
 	if err != nil {
 		return nil, err

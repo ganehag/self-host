@@ -172,16 +172,6 @@ func (ra *RestApi) QueryTimeseriesForData(w http.ResponseWriter, r *http.Request
 
 	svc := services.NewTimeseriesService(db)
 
-	// Ensure the timeseries exists
-	ok, err := svc.Exists(r.Context(), tsUUID)
-	if err != nil {
-		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	} else if ok == false {
-		ie.SendHTTPError(w, ie.ErrorNotFound)
-		return
-	}
-
 	if time.Time(p.End).Sub(time.Time(p.Start)) > 31622401*time.Second {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
@@ -415,16 +405,6 @@ func (ra *RestApi) DeleteDataFromTimeSeries(w http.ResponseWriter, r *http.Reque
 	}
 
 	svc := services.NewTimeseriesService(db)
-
-	// Ensure the timeseries exists
-	ok, err := svc.Exists(r.Context(), tsUUID)
-	if err != nil {
-		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	} else if ok == false {
-		ie.SendHTTPError(w, ie.ErrorNotFound)
-		return
-	}
 
 	if time.Time(p.End).Sub(time.Time(p.Start)) > 31622401*time.Second {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)

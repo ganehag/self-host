@@ -187,15 +187,6 @@ func (ra *RestApi) FindDatasetsForThing(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	s := services.NewThingService(db)
-	if ok, err := s.Exists(r.Context(), thingUUID); err != nil {
-		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	} else if ok == false {
-		ie.SendHTTPError(w, ie.ErrorNotFound)
-		return
-	}
-
 	srv := services.NewDatasetService(db)
 	datasets, err := srv.FindByThing(r.Context(), thingUUID)
 	if err != nil {

@@ -15,18 +15,20 @@ import (
 
 const addTokenToUser = `-- name: AddTokenToUser :one
 INSERT INTO user_tokens(user_uuid, name, token_hash)
-VALUES ($1, $2, sha256($3))
+SELECT users.uuid, $1, sha256($2)
+FROM users
+WHERE users.uuid = $3
 RETURNING uuid, user_uuid, name, token_hash, created
 `
 
 type AddTokenToUserParams struct {
-	UserUuid uuid.UUID
 	Name     string
 	Secret   []byte
+	UserUuid uuid.UUID
 }
 
 func (q *Queries) AddTokenToUser(ctx context.Context, arg AddTokenToUserParams) (UserToken, error) {
-	row := q.queryRow(ctx, q.addTokenToUserStmt, addTokenToUser, arg.UserUuid, arg.Name, arg.Secret)
+	row := q.queryRow(ctx, q.addTokenToUserStmt, addTokenToUser, arg.Name, arg.Secret, arg.UserUuid)
 	var i UserToken
 	err := row.Scan(
 		&i.Uuid,
@@ -210,6 +212,39 @@ func (q *Queries) FindUserByUUID(ctx context.Context, argUuid uuid.UUID) (User, 
 	row := q.queryRow(ctx, q.findUserByUUIDStmt, findUserByUUID, argUuid)
 	var i User
 	err := row.Scan(&i.Uuid, &i.Name, &i.State)
+	return i, err
+}
+
+const findUserWithGroupsByUUID = `-- name: FindUserWithGroupsByUUID :one
+SELECT
+	users.uuid, users.name, users.state,
+	(COALESCE((
+		SELECT json_agg(json_build_object('uuid', groups.uuid, 'name', groups.name))
+		FROM user_groups
+		INNER JOIN groups ON groups.uuid = user_groups.group_uuid
+		WHERE users.uuid = user_groups.user_uuid
+	), '[]')::text) AS groups
+FROM users
+WHERE users.uuid = $1
+LIMIT 1
+`
+
+type FindUserWithGroupsByUUIDRow struct {
+	Uuid   uuid.UUID
+	Name   string
+	State  AccountState
+	Groups string
+}
+
+func (q *Queries) FindUserWithGroupsByUUID(ctx context.Context, argUuid uuid.UUID) (FindUserWithGroupsByUUIDRow, error) {
+	row := q.queryRow(ctx, q.findUserWithGroupsByUUIDStmt, findUserWithGroupsByUUID, argUuid)
+	var i FindUserWithGroupsByUUIDRow
+	err := row.Scan(
+		&i.Uuid,
+		&i.Name,
+		&i.State,
+		&i.Groups,
+	)
 	return i, err
 }
 

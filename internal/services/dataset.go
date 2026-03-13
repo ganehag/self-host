@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/self-host/self-host/api/aapije/rest"
+	ie "github.com/self-host/self-host/internal/errors"
 	"github.com/self-host/self-host/postgres"
 )
 
@@ -131,6 +132,15 @@ func (svc *DatasetService) FindByThing(ctx context.Context, id uuid.UUID) ([]*re
 	datasetsList, err := svc.q.FindDatasetByThing(ctx, nullableUUIDValue(id))
 	if err != nil {
 		return nil, err
+	}
+
+	if len(datasetsList) == 0 {
+		count, err := svc.q.ExistsThing(ctx, id)
+		if err != nil {
+			return nil, err
+		} else if count == 0 {
+			return nil, ie.ErrorNotFound
+		}
 	}
 
 	for _, t := range datasetsList {
