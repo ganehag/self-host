@@ -4,8 +4,7 @@ SELECT	ts_uuid,
 	ts
 FROM tsdata
 WHERE ts_uuid = ANY(sqlc.arg(ts_uuids)::uuid[])
-AND ts BETWEEN sqlc.arg(start) AND sqlc.arg(stop)
-ORDER BY ts ASC;
+AND ts BETWEEN sqlc.arg(start) AND sqlc.arg(stop);
 
 -- name: GetTsDataRangeAgg :many
 WITH tsdata_trunc AS (
@@ -42,7 +41,7 @@ SELECT
         ts::timestamptz
 FROM tsdata_trunc
 GROUP BY ts_uuid, ts
-ORDER BY ts ASC;
+ORDER BY ts_uuid ASC, ts ASC;
 
 -- name: CreateTsData :execrows
 INSERT INTO tsdata(ts_uuid, value, ts, created_by)

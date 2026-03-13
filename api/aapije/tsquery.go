@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/self-host/self-host/api/aapije/rest"
 	ie "github.com/self-host/self-host/internal/errors"
 	"github.com/self-host/self-host/internal/services"
@@ -61,15 +62,6 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 		return
 	}
 
-	ok, err = svc.ExistAll(r.Context(), uuids)
-	if err != nil {
-		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	} else if ok == false {
-		ie.SendHTTPError(w, ie.ErrorNotFound)
-		return
-	}
-
 	// Generate check rules for access control
 	resources := make([]string, 0)
 	for _, id := range uuids {
@@ -104,7 +96,26 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 		return
 	}
 
+	if len(data) < uniqueUUIDCount(uuids) {
+		ok, err = svc.ExistAll(r.Context(), uuids)
+		if err != nil {
+			ie.SendHTTPError(w, ie.ParseDBError(err))
+			return
+		} else if ok == false {
+			ie.SendHTTPError(w, ie.ErrorNotFound)
+			return
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(data)
 	return
+}
+
+func uniqueUUIDCount(ids []uuid.UUID) int {
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	for _, id := range ids {
+		seen[id] = struct{}{}
+	}
+	return len(seen)
 }

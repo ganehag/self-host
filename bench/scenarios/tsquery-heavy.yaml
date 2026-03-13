@@ -1,0 +1,36 @@
+name: tsquery-heavy
+base_url: http://127.0.0.1:8080
+domain: test
+token: root
+duration: 60s
+warmup: 5s
+concurrency: 12
+timeout: 15s
+headers:
+  Accept: application/json
+operations:
+  - name: multi_day_hourly_avg_8
+    weight: 35
+    method: GET
+    path: /v2/tsquery?{{ seriesQuery 0 8 }}&start={{ windowStart "day" }}&end={{ windowEnd "day" }}&aggregate=avg&precision=hour
+    expected_statuses: [200]
+  - name: multi_week_hourly_avg_8
+    weight: 25
+    method: GET
+    path: /v2/tsquery?{{ seriesQuery 0 8 }}&start={{ windowStart "week" }}&end={{ windowEnd "week" }}&aggregate=avg&precision=hour
+    expected_statuses: [200]
+  - name: multi_month_daily_avg_8
+    weight: 20
+    method: GET
+    path: /v2/tsquery?{{ seriesQuery 0 8 }}&start={{ windowStart "month" }}&end={{ windowEnd "month" }}&aggregate=avg&precision=day
+    expected_statuses: [200]
+  - name: multi_full_daily_avg_16
+    weight: 10
+    method: GET
+    path: /v2/tsquery?{{ seriesQuery 0 16 }}&start={{ windowStart "full" }}&end={{ windowEnd "full" }}&aggregate=avg&precision=day
+    expected_statuses: [200]
+  - name: multi_day_raw_8
+    weight: 10
+    method: GET
+    path: /v2/tsquery?{{ seriesQuery 0 8 }}&start={{ windowStart "day" }}&end={{ windowEnd "day" }}
+    expected_statuses: [200]

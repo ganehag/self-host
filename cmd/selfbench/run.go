@@ -206,6 +206,23 @@ func compileOperations(cfg *RunConfig, manifest *Manifest) ([]compiledOperation,
 			}
 			return manifest.Series[index].UUID
 		},
+		"seriesQuery": func(start, count int) string {
+			if manifest == nil || count <= 0 || start < 0 || start >= len(manifest.Series) {
+				return ""
+			}
+
+			end := start + count
+			if end > len(manifest.Series) {
+				end = len(manifest.Series)
+			}
+
+			parts := make([]string, 0, end-start)
+			for i := start; i < end; i++ {
+				parts = append(parts, "uuids="+manifest.Series[i].UUID)
+			}
+
+			return strings.Join(parts, "&")
+		},
 		"windowStart": func(name string) string {
 			for _, window := range manifest.Windows {
 				if window.Name == name {

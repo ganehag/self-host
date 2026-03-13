@@ -97,7 +97,6 @@ SELECT	ts_uuid,
 FROM tsdata
 WHERE ts_uuid = ANY($1::uuid[])
 AND ts BETWEEN $2 AND $3
-ORDER BY ts ASC
 `
 
 type GetTsDataRangeParams struct {
@@ -170,7 +169,7 @@ SELECT
         ts::timestamptz
 FROM tsdata_trunc
 GROUP BY ts_uuid, ts
-ORDER BY ts ASC
+ORDER BY ts_uuid ASC, ts ASC
 `
 
 type GetTsDataRangeAggParams struct {

@@ -572,68 +572,38 @@ func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryM
 		return nil, ie.NewInvalidRequestError(err)
 	}
 
-	mapping := make(map[uuid.UUID][]rest.TsRow, 0)
-	if shouldAggregateData(p.Aggregate, p.Precision) {
-		params := postgres.GetTsDataRangeAggParams{
-			Aggregate: p.Aggregate,
-			Truncate:  p.Precision,
-			Timezone:  p.Timezone,
-			TsUuids:   p.Uuids,
-			Start:     p.Start,
-			Stop:      p.End,
-		}
+	dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+		TsUuids: p.Uuids,
+		Start:   p.Start,
+		Stop:    p.End,
+	})
+	if err != nil {
+		return nil, err
+	}
 
-		dataList, err := svc.q.GetTsDataRangeAgg(ctx, params)
+	mapping := make(map[uuid.UUID][]rest.TsRow, len(p.Uuids))
+	if shouldAggregateData(p.Aggregate, p.Precision) {
+		mapping, err = aggregateMultiSourceRows(dataList, p, tzloc)
 		if err != nil {
 			return nil, err
-		}
-
-		for _, item := range dataList {
-			if _, ok := mapping[item.TsUuid]; ok == false {
-				mapping[item.TsUuid] = make([]rest.TsRow, 0)
-			}
-
-			f := float32(item.Value)
-
-			if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
-				continue
-			}
-
-			mapping[item.TsUuid] = append(mapping[item.TsUuid], rest.TsRow{
-				V:  f,
-				Ts: item.Ts.In(tzloc),
-			})
 		}
 	} else {
-		dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
-			TsUuids: p.Uuids,
-			Start:   p.Start,
-			Stop:    p.End,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		for _, item := range dataList {
-			if _, ok := mapping[item.TsUuid]; ok == false {
-				mapping[item.TsUuid] = make([]rest.TsRow, 0)
-			}
-
-			f := float32(item.Value)
-
-			if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
-				continue
-			}
-
-			mapping[item.TsUuid] = append(mapping[item.TsUuid], rest.TsRow{
-				V:  f,
-				Ts: item.Ts.In(tzloc),
-			})
-		}
+		appendRawMultiSourceRows(mapping, dataList, p, tzloc)
 	}
 
 	tsResult := make([]*rest.TsResults, 0)
-	for key, data := range mapping {
+	seen := make(map[uuid.UUID]struct{}, len(p.Uuids))
+	for _, key := range p.Uuids {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		data, ok := mapping[key]
+		if ok == false {
+			continue
+		}
+
 		tsResult = append(tsResult, &rest.TsResults{
 			Uuid: key.String(),
 			Data: data,
@@ -754,6 +724,100 @@ func aggregateSingleSourceRows(rows []postgres.GetTsDataRangeRow, p QuerySingleS
 	}
 
 	return result, nil
+}
+
+func appendRawMultiSourceRows(mapping map[uuid.UUID][]rest.TsRow, rows []postgres.GetTsDataRangeRow, p QueryMultiSourceDataParams, tzloc *time.Location) {
+	for _, item := range rows {
+		f := float32(item.Value)
+
+		if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+			continue
+		}
+
+		mapping[item.TsUuid] = append(mapping[item.TsUuid], rest.TsRow{
+			V:  f,
+			Ts: item.Ts.In(tzloc),
+		})
+	}
+
+	for key := range mapping {
+		sort.Slice(mapping[key], func(i, j int) bool {
+			return mapping[key][i].Ts.Before(mapping[key][j].Ts)
+		})
+	}
+}
+
+func aggregateMultiSourceRows(rows []postgres.GetTsDataRangeRow, p QueryMultiSourceDataParams, tzloc *time.Location) (map[uuid.UUID][]rest.TsRow, error) {
+	mapping := make(map[uuid.UUID][]rest.TsRow, len(p.Uuids))
+	if len(rows) == 0 {
+		return mapping, nil
+	}
+
+	bucketsBySeries := make(map[uuid.UUID]map[time.Time]*aggregateBucket, len(p.Uuids))
+	keysBySeries := make(map[uuid.UUID][]time.Time, len(p.Uuids))
+
+	for _, item := range rows {
+		bucketTs, err := truncateTime(item.Ts, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+
+		seriesBuckets := bucketsBySeries[item.TsUuid]
+		if seriesBuckets == nil {
+			seriesBuckets = make(map[time.Time]*aggregateBucket)
+			bucketsBySeries[item.TsUuid] = seriesBuckets
+		}
+
+		bucket := seriesBuckets[bucketTs]
+		if bucket == nil {
+			bucket = &aggregateBucket{
+				ts:  bucketTs,
+				min: item.Value,
+				max: item.Value,
+			}
+			seriesBuckets[bucketTs] = bucket
+			keysBySeries[item.TsUuid] = append(keysBySeries[item.TsUuid], bucketTs)
+		}
+
+		bucket.count++
+		bucket.sum += item.Value
+		if item.Value < bucket.min {
+			bucket.min = item.Value
+		}
+		if item.Value > bucket.max {
+			bucket.max = item.Value
+		}
+	}
+
+	for seriesID, keys := range keysBySeries {
+		sort.Slice(keys, func(i, j int) bool {
+			return keys[i].Before(keys[j])
+		})
+
+		rows := make([]rest.TsRow, 0, len(keys))
+		for _, key := range keys {
+			value, err := aggregateBucketValue(bucketsBySeries[seriesID][key], p.Aggregate)
+			if err != nil {
+				return nil, err
+			}
+
+			f := float32(value)
+			if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+				continue
+			}
+
+			rows = append(rows, rest.TsRow{
+				V:  f,
+				Ts: key.In(tzloc),
+			})
+		}
+
+		if len(rows) > 0 {
+			mapping[seriesID] = rows
+		}
+	}
+
+	return mapping, nil
 }
 
 func aggregateBucketValue(bucket *aggregateBucket, aggregate string) (float64, error) {
