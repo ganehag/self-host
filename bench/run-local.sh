@@ -45,7 +45,8 @@ require curl
 cd "$ROOT_DIR"
 
 echo "bringing up benchmark stack"
-docker compose -f "$COMPOSE_FILE" up -d --build
+docker compose -f "$COMPOSE_FILE" up -d postgres
+docker compose -f "$COMPOSE_FILE" up -d --build --force-recreate aapije
 
 echo "waiting for api"
 wait_for_http "http://127.0.0.1:8080/status"
