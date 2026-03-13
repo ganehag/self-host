@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/spf13/viper"
 
 	"github.com/self-host/self-host/api/aapije/rest"
 	ie "github.com/self-host/self-host/internal/errors"
@@ -169,6 +170,7 @@ func (ra *RestApi) QueryTimeseriesForData(w http.ResponseWriter, r *http.Request
 		GreaterOrEq: (*float32)(p.Ge),
 		LessOrEq:    (*float32)(p.Le),
 		Unit:        (*string)(p.Unit),
+		MaxPoints:   viper.GetInt("timeseries_queries.max_points_per_series"),
 	}
 
 	if p.Timezone != nil {

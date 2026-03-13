@@ -15,6 +15,7 @@ import (
 	ie "github.com/self-host/self-host/internal/errors"
 	"github.com/self-host/self-host/internal/services"
 	"github.com/self-host/self-host/pkg/util"
+	"github.com/spf13/viper"
 )
 
 // FindTsdataByQuery query multiple time series for data
@@ -61,6 +62,13 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 		ie.SendHTTPError(w, ie.NewBadRequestError(fmt.Errorf("uuids has invalid format")))
 		return
 	}
+	uuids = uniqueUUIDs(uuids)
+
+	maxSeries := viper.GetInt("timeseries_queries.max_series")
+	if maxSeries > 0 && len(uuids) > maxSeries {
+		ie.SendHTTPError(w, ie.NewBadRequestError(fmt.Errorf("requested %d timeseries, limit is %d", len(uuids), maxSeries)))
+		return
+	}
 
 	// Generate check rules for access control
 	resources := make([]string, 0)
@@ -80,14 +88,16 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 	}
 
 	params := services.QueryMultiSourceDataParams{
-		Uuids:       uuids,
-		Start:       time.Time(p.Start),
-		End:         time.Time(p.End),
-		GreaterOrEq: (*float32)(p.Ge),
-		LessOrEq:    (*float32)(p.Le),
-		Aggregate:   aggregate,
-		Precision:   precision,
-		Timezone:    timezone,
+		Uuids:              uuids,
+		Start:              time.Time(p.Start),
+		End:                time.Time(p.End),
+		GreaterOrEq:        (*float32)(p.Ge),
+		LessOrEq:           (*float32)(p.Le),
+		Aggregate:          aggregate,
+		Precision:          precision,
+		Timezone:           timezone,
+		MaxPointsPerSeries: viper.GetInt("timeseries_queries.max_points_per_series"),
+		MaxTotalPoints:     viper.GetInt("timeseries_queries.max_total_points"),
 	}
 
 	data, err := svc.QueryMultiSourceData(r.Context(), params)
@@ -110,6 +120,19 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(data)
 	return
+}
+
+func uniqueUUIDs(ids []uuid.UUID) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	out := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 func uniqueUUIDCount(ids []uuid.UUID) int {

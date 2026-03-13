@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -456,6 +457,7 @@ type QuerySingleSourceDataParams struct {
 	Aggregate   string
 	Precision   string
 	Timezone    string
+	MaxPoints   int
 }
 
 func (svc *TimeseriesService) QuerySingleSourceData(ctx context.Context, p QuerySingleSourceDataParams) ([]*rest.TsRow, error) {
@@ -510,6 +512,9 @@ func (svc *TimeseriesService) QuerySingleSourceData(ctx context.Context, p Query
 				return nil, err
 			}
 		}
+		if err := validateSingleSeriesPointLimit(len(result), p.MaxPoints); err != nil {
+			return nil, err
+		}
 		return result, nil
 	}
 
@@ -551,19 +556,24 @@ func (svc *TimeseriesService) QuerySingleSourceData(ctx context.Context, p Query
 			return nil, err
 		}
 	}
+	if err := validateSingleSeriesPointLimit(len(tsdata), p.MaxPoints); err != nil {
+		return nil, err
+	}
 
 	return tsdata, nil
 }
 
 type QueryMultiSourceDataParams struct {
-	Uuids       []uuid.UUID
-	Start       time.Time
-	End         time.Time
-	GreaterOrEq *float32
-	LessOrEq    *float32
-	Aggregate   string
-	Precision   string
-	Timezone    string
+	Uuids              []uuid.UUID
+	Start              time.Time
+	End                time.Time
+	GreaterOrEq        *float32
+	LessOrEq           *float32
+	Aggregate          string
+	Precision          string
+	Timezone           string
+	MaxPointsPerSeries int
+	MaxTotalPoints     int
 }
 
 func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryMultiSourceDataParams) ([]*rest.TsResults, error) {
@@ -588,7 +598,9 @@ func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryM
 			return nil, err
 		}
 	} else {
-		appendRawMultiSourceRows(mapping, dataList, p, tzloc)
+		if err := appendRawMultiSourceRows(mapping, dataList, p, tzloc); err != nil {
+			return nil, err
+		}
 	}
 
 	tsResult := make([]*rest.TsResults, 0)
@@ -726,7 +738,8 @@ func aggregateSingleSourceRows(rows []postgres.GetTsDataRangeRow, p QuerySingleS
 	return result, nil
 }
 
-func appendRawMultiSourceRows(mapping map[uuid.UUID][]rest.TsRow, rows []postgres.GetTsDataRangeRow, p QueryMultiSourceDataParams, tzloc *time.Location) {
+func appendRawMultiSourceRows(mapping map[uuid.UUID][]rest.TsRow, rows []postgres.GetTsDataRangeRow, p QueryMultiSourceDataParams, tzloc *time.Location) error {
+	totalPoints := 0
 	for _, item := range rows {
 		f := float32(item.Value)
 
@@ -738,6 +751,11 @@ func appendRawMultiSourceRows(mapping map[uuid.UUID][]rest.TsRow, rows []postgre
 			V:  f,
 			Ts: item.Ts.In(tzloc),
 		})
+
+		totalPoints++
+		if err := validateMultiSeriesLimits(len(mapping[item.TsUuid]), totalPoints, p); err != nil {
+			return err
+		}
 	}
 
 	for key := range mapping {
@@ -745,6 +763,8 @@ func appendRawMultiSourceRows(mapping map[uuid.UUID][]rest.TsRow, rows []postgre
 			return mapping[key][i].Ts.Before(mapping[key][j].Ts)
 		})
 	}
+
+	return nil
 }
 
 func aggregateMultiSourceRows(rows []postgres.GetTsDataRangeRow, p QueryMultiSourceDataParams, tzloc *time.Location) (map[uuid.UUID][]rest.TsRow, error) {
@@ -755,6 +775,7 @@ func aggregateMultiSourceRows(rows []postgres.GetTsDataRangeRow, p QueryMultiSou
 
 	bucketsBySeries := make(map[uuid.UUID]map[time.Time]*aggregateBucket, len(p.Uuids))
 	keysBySeries := make(map[uuid.UUID][]time.Time, len(p.Uuids))
+	totalPoints := 0
 
 	for _, item := range rows {
 		bucketTs, err := truncateTime(item.Ts, p.Precision, tzloc)
@@ -813,11 +834,32 @@ func aggregateMultiSourceRows(rows []postgres.GetTsDataRangeRow, p QueryMultiSou
 		}
 
 		if len(rows) > 0 {
+			totalPoints += len(rows)
+			if err := validateMultiSeriesLimits(len(rows), totalPoints, p); err != nil {
+				return nil, err
+			}
 			mapping[seriesID] = rows
 		}
 	}
 
 	return mapping, nil
+}
+
+func validateSingleSeriesPointLimit(points, maxPoints int) error {
+	if maxPoints > 0 && points > maxPoints {
+		return ie.NewHTTPError(nil, http.StatusRequestEntityTooLarge, fmt.Sprintf("timeseries query returned %d points, limit is %d", points, maxPoints))
+	}
+	return nil
+}
+
+func validateMultiSeriesLimits(seriesPoints, totalPoints int, p QueryMultiSourceDataParams) error {
+	if p.MaxPointsPerSeries > 0 && seriesPoints > p.MaxPointsPerSeries {
+		return ie.NewHTTPError(nil, http.StatusRequestEntityTooLarge, fmt.Sprintf("timeseries query returned more than %d points for one series", p.MaxPointsPerSeries))
+	}
+	if p.MaxTotalPoints > 0 && totalPoints > p.MaxTotalPoints {
+		return ie.NewHTTPError(nil, http.StatusRequestEntityTooLarge, fmt.Sprintf("timeseries query returned more than %d total points", p.MaxTotalPoints))
+	}
+	return nil
 }
 
 func aggregateBucketValue(bucket *aggregateBucket, aggregate string) (float64, error) {
