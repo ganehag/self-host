@@ -64,67 +64,73 @@ VALUES (
 
 -- name: FindPrograms :many
 WITH usr AS (
-	SELECT users.uuid
-	FROM users, user_tokens
-	WHERE user_tokens.user_uuid = users.uuid
-	AND user_tokens.token_hash = sha256(sqlc.arg(token))
+	SELECT user_tokens.user_uuid AS uuid
+	FROM user_tokens
+	WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
 	LIMIT 1
-), policies AS (
-	SELECT group_policies.effect, group_policies.priority, group_policies.resource
-	FROM group_policies, user_groups
-	WHERE user_groups.group_uuid = group_policies.group_uuid
-	AND user_groups.user_uuid = (SELECT uuid FROM usr)
-	AND action = 'read'
+), permitted_programs AS (
+	SELECT *
+	FROM programs
+	WHERE EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'allow'
+		AND ('programs/'||programs.uuid) LIKE group_policies.resource
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'deny'
+		AND ('programs/'||programs.uuid) LIKE group_policies.resource
+	)
+	ORDER BY name
+	LIMIT sqlc.arg(arg_limit)::BIGINT
+	OFFSET sqlc.arg(arg_offset)::BIGINT
 )
 SELECT
 	*
-FROM programs
-WHERE 'programs/'||programs.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'allow')
-)
-EXCEPT
-SELECT
-	*
-FROM programs
-WHERE 'programs/'||programs.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'deny')
-)
-ORDER BY name
-LIMIT sqlc.arg(arg_limit)::BIGINT
-OFFSET sqlc.arg(arg_offset)::BIGINT
-;
+FROM permitted_programs;
 
 -- name: FindProgramsByTags :many
 WITH usr AS (
-	SELECT users.uuid
-	FROM users, user_tokens
-	WHERE user_tokens.user_uuid = users.uuid
-	AND user_tokens.token_hash = sha256(sqlc.arg(token))
+	SELECT user_tokens.user_uuid AS uuid
+	FROM user_tokens
+	WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
 	LIMIT 1
-), policies AS (
-	SELECT group_policies.effect, group_policies.priority, group_policies.resource
-	FROM group_policies, user_groups
-	WHERE user_groups.group_uuid = group_policies.group_uuid
-	AND user_groups.user_uuid = (SELECT uuid FROM usr)
-	AND action = 'read'
+), permitted_programs AS (
+	SELECT *
+	FROM programs
+	WHERE sqlc.arg(tags) && programs.tags
+	AND EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'allow'
+		AND ('programs/'||programs.uuid) LIKE group_policies.resource
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'deny'
+		AND ('programs/'||programs.uuid) LIKE group_policies.resource
+	)
+	ORDER BY name
+	LIMIT sqlc.arg(arg_limit)::BIGINT
+	OFFSET sqlc.arg(arg_offset)::BIGINT
 )
 SELECT *
-FROM programs
-WHERE 'programs/'||programs.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'allow')
-)
-AND sqlc.arg(tags) && programs.tags
-EXCEPT
-SELECT *
-FROM programs
-WHERE 'programs/'||programs.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'deny')
-)
-AND sqlc.arg(tags) && programs.tags
-ORDER BY name
-LIMIT sqlc.arg(arg_limit)::BIGINT
-OFFSET sqlc.arg(arg_offset)::BIGINT
-;
+FROM permitted_programs;
 
 -- name: FindAllRoutineRevisions :many
 WITH p AS (
@@ -242,39 +248,37 @@ AND signed IS NOT NULL
 ORDER BY revision DESC
 LIMIT 1;
 
--- name: SetProgramNameByUUID :execrows
+-- name: UpdateProgramByUUID :execrows
 UPDATE programs
-SET name = sqlc.arg(name)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramTypeByUUID :execrows
-UPDATE programs
-SET type = sqlc.arg(type)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramStateByUUID :execrows
-UPDATE programs
-SET state = sqlc.arg(state)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramScheduleByUUID :execrows
-UPDATE programs
-SET schedule = sqlc.arg(schedule)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramDeadlineByUUID :execrows
-UPDATE programs
-SET deadline = sqlc.arg(deadline)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramLanguageByUUID :execrows
-UPDATE programs
-SET language = sqlc.arg(language)
-WHERE programs.uuid = sqlc.arg(uuid);
-
--- name: SetProgramTags :execrows
-UPDATE programs
-SET tags = sqlc.arg(tags)
+SET
+	name = CASE
+		WHEN sqlc.arg(set_name)::boolean THEN sqlc.arg(name)
+		ELSE name
+	END,
+	type = CASE
+		WHEN sqlc.arg(set_type)::boolean THEN sqlc.arg(type)
+		ELSE type
+	END,
+	state = CASE
+		WHEN sqlc.arg(set_state)::boolean THEN sqlc.arg(state)
+		ELSE state
+	END,
+	schedule = CASE
+		WHEN sqlc.arg(set_schedule)::boolean THEN sqlc.arg(schedule)
+		ELSE schedule
+	END,
+	deadline = CASE
+		WHEN sqlc.arg(set_deadline)::boolean THEN sqlc.arg(deadline)
+		ELSE deadline
+	END,
+	language = CASE
+		WHEN sqlc.arg(set_language)::boolean THEN sqlc.arg(language)
+		ELSE language
+	END,
+	tags = CASE
+		WHEN sqlc.arg(set_tags)::boolean THEN sqlc.arg(tags)
+		ELSE tags
+	END
 WHERE programs.uuid = sqlc.arg(uuid);
 
 -- name: SignProgramCodeRevision :execrows

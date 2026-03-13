@@ -4,8 +4,20 @@ SELECT	ts_uuid,
 	ts
 FROM tsdata
 WHERE ts_uuid = ANY(sqlc.arg(ts_uuids)::uuid[])
-AND ts BETWEEN sqlc.arg(start) AND sqlc.arg(stop)
-ORDER BY ts ASC;
+AND ts BETWEEN sqlc.arg(start) AND sqlc.arg(stop);
+
+-- name: GetTsHourlyRollupRange :many
+SELECT
+	ts_uuid,
+	bucket_ts,
+	sample_count,
+	sample_sum,
+	sample_min,
+	sample_max
+FROM tsdata_hourly_rollups
+WHERE ts_uuid = ANY(sqlc.arg(ts_uuids)::uuid[])
+AND bucket_ts BETWEEN sqlc.arg(start) AND sqlc.arg(stop)
+ORDER BY ts_uuid ASC, bucket_ts ASC;
 
 -- name: GetTsDataRangeAgg :many
 WITH tsdata_trunc AS (
@@ -28,8 +40,7 @@ WITH tsdata_trunc AS (
 	END AS ts
 	FROM tsdata
 	WHERE ts_uuid = ANY(sqlc.arg(ts_uuids)::uuid[])
-	AND ts BETWEEN (sqlc.arg(start)::timestamptz AT time zone sqlc.arg(timezone)::text)
-		AND (sqlc.arg(stop)::timestamptz AT time zone sqlc.arg(timezone)::text)
+	AND ts BETWEEN sqlc.arg(start) AND sqlc.arg(stop)
 )
 SELECT
         ts_uuid::uuid,
@@ -43,7 +54,7 @@ SELECT
         ts::timestamptz
 FROM tsdata_trunc
 GROUP BY ts_uuid, ts
-ORDER BY ts ASC;
+ORDER BY ts_uuid ASC, ts ASC;
 
 -- name: CreateTsData :execrows
 INSERT INTO tsdata(ts_uuid, value, ts, created_by)

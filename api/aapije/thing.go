@@ -30,17 +30,9 @@ func (ra *RestApi) AddThing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
-	if ok == false {
-		ie.SendHTTPError(w, ie.ErrorUndefined)
-		return
-	}
-
-	u := services.NewUserService(db)
-
-	author, err := u.GetUserUuidFromToken(r.Context(), []byte(domaintoken.Token))
+	author, err := ra.GetUserUUID(r)
 	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidAPIKey)
+		ie.SendHTTPError(w, ie.ErrorUndefined)
 		return
 	}
 
@@ -184,15 +176,6 @@ func (ra *RestApi) FindDatasetsForThing(w http.ResponseWriter, r *http.Request, 
 	db, err := ra.GetDB(r)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ErrorUndefined)
-		return
-	}
-
-	s := services.NewThingService(db)
-	if ok, err := s.Exists(r.Context(), thingUUID); err != nil {
-		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	} else if ok == false {
-		ie.SendHTTPError(w, ie.ErrorNotFound)
 		return
 	}
 

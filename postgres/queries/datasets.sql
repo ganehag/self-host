@@ -57,109 +57,96 @@ FROM ds LIMIT 1;
 
 -- name: FindDatasets :many
 WITH usr AS (
-	SELECT users.uuid
-	FROM users, user_tokens
-	WHERE user_tokens.user_uuid = users.uuid
-	AND user_tokens.token_hash = sha256(sqlc.arg(token))
+	SELECT user_tokens.user_uuid AS uuid
+	FROM user_tokens
+	WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
 	LIMIT 1
-), policies AS (
-	SELECT group_policies.effect, group_policies.priority, group_policies.resource
-	FROM group_policies, user_groups
-	WHERE user_groups.group_uuid = group_policies.group_uuid
-	AND user_groups.user_uuid = (SELECT uuid FROM usr)
-	AND action = 'read'
+), permitted_datasets AS (
+	SELECT
+		uuid,
+		name,
+		format,
+		encode(checksum, 'hex') AS checksum,
+		size,
+		belongs_to,
+		created,
+		updated,
+		created_by,
+		updated_by,
+		tags
+	FROM datasets
+	WHERE EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'allow'
+		AND ('datasets/'||datasets.uuid) LIKE group_policies.resource
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'deny'
+		AND ('datasets/'||datasets.uuid) LIKE group_policies.resource
+	)
+	ORDER BY name
+	LIMIT sqlc.arg(arg_limit)::BIGINT
+	OFFSET sqlc.arg(arg_offset)::BIGINT
 )
 SELECT
-	uuid,
-	name,
-	format,
-	encode(checksum, 'hex') AS checksum,
-	size,
-	belongs_to,
-	created,
-	updated,
-	created_by,
-	updated_by,
-	tags
-FROM datasets
-WHERE 'datasets/'||datasets.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'allow')
-)
-EXCEPT
-SELECT
-	uuid,
-	name,
-	format,
-	encode(checksum, 'hex') AS checksum,
-	size,
-	belongs_to,
-	created,
-	updated,
-	created_by,
-	updated_by,
-	tags
-FROM datasets
-WHERE 'datasets/'||datasets.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'deny')
-)
-ORDER BY name
-LIMIT sqlc.arg(arg_limit)::BIGINT
-OFFSET sqlc.arg(arg_offset)::BIGINT
-;
+	*
+FROM permitted_datasets;
 
 -- name: FindDatasetsByTags :many
 WITH usr AS (
-	SELECT users.uuid
-	FROM users, user_tokens
-	WHERE user_tokens.user_uuid = users.uuid
-	AND user_tokens.token_hash = sha256(sqlc.arg(token))
+	SELECT user_tokens.user_uuid AS uuid
+	FROM user_tokens
+	WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
 	LIMIT 1
-), policies AS (
-	SELECT group_policies.effect, group_policies.priority, group_policies.resource
-	FROM group_policies, user_groups
-	WHERE user_groups.group_uuid = group_policies.group_uuid
-	AND user_groups.user_uuid = (SELECT uuid FROM usr)
-	AND action = 'read'
+), permitted_datasets AS (
+	SELECT
+		uuid,
+		name,
+		format,
+		encode(checksum, 'hex') AS checksum,
+		size,
+		belongs_to,
+		created,
+		updated,
+		created_by,
+		updated_by,
+		tags
+	FROM datasets
+	WHERE sqlc.arg(tags) && datasets.tags
+	AND EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'allow'
+		AND ('datasets/'||datasets.uuid) LIKE group_policies.resource
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'deny'
+		AND ('datasets/'||datasets.uuid) LIKE group_policies.resource
+	)
+	ORDER BY name
+	LIMIT sqlc.arg(arg_limit)::BIGINT
+	OFFSET sqlc.arg(arg_offset)::BIGINT
 )
 SELECT
-	uuid,
-	name,
-	format,
-	encode(checksum, 'hex') AS checksum,
-	size,
-	belongs_to,
-	created,
-	updated,
-	created_by,
-	updated_by,
-	tags
-FROM datasets
-WHERE 'datasets/'||datasets.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'allow')
-)
-AND sqlc.arg(tags) && datasets.tags
-EXCEPT
-SELECT
-	uuid,
-	name,
-	format,
-	encode(checksum, 'hex') AS checksum,
-	size,
-	belongs_to,
-	created,
-	updated,
-	created_by,
-	updated_by,
-	tags
-FROM datasets
-WHERE 'datasets/'||datasets.uuid LIKE ANY(
-	(SELECT resource FROM policies WHERE effect = 'deny')
-)
-AND sqlc.arg(tags) && datasets.tags
-ORDER BY name
-LIMIT sqlc.arg(arg_limit)::BIGINT
-OFFSET sqlc.arg(arg_offset)::BIGINT
-;
+	*
+FROM permitted_datasets;
 
 -- name: FindDatasetByUUID :one
 SELECT
@@ -202,30 +189,33 @@ FROM datasets
 WHERE datasets.uuid = sqlc.arg(uuid)
 LIMIT 1;
 
--- name: SetDatasetNameByUUID :execrows
+-- name: UpdateDatasetByUUID :execrows
 UPDATE datasets
-SET name = sqlc.arg(name)
-WHERE datasets.uuid = sqlc.arg(uuid);
-
--- name: SetDatasetFormatByUUID :execrows
-UPDATE datasets
-SET format = sqlc.arg(format)
-WHERE datasets.uuid = sqlc.arg(uuid);
-
--- name: SetDatasetContentByUUID :execrows
-UPDATE datasets
-SET content = sqlc.arg(content)::bytea,
-    checksum = sha256(sqlc.arg(content)::bytea)
-WHERE datasets.uuid = sqlc.arg(uuid);
-
--- name: SetDatasetThingByUUID :execrows
-UPDATE datasets
-SET belongs_to = sqlc.arg(thing_uuid)
-WHERE datasets.uuid = sqlc.arg(uuid);
-
--- name: SetDatasetTags :execrows
-UPDATE datasets
-SET tags = sqlc.arg(tags)
+SET
+	name = CASE
+		WHEN sqlc.arg(set_name)::boolean THEN sqlc.arg(name)
+		ELSE name
+	END,
+	format = CASE
+		WHEN sqlc.arg(set_format)::boolean THEN sqlc.arg(format)
+		ELSE format
+	END,
+	content = CASE
+		WHEN sqlc.arg(set_content)::boolean THEN sqlc.arg(content)::bytea
+		ELSE content
+	END,
+	checksum = CASE
+		WHEN sqlc.arg(set_content)::boolean THEN sha256(sqlc.arg(content)::bytea)
+		ELSE checksum
+	END,
+	belongs_to = CASE
+		WHEN sqlc.arg(set_thing_uuid)::boolean THEN sqlc.arg(thing_uuid)
+		ELSE belongs_to
+	END,
+	tags = CASE
+		WHEN sqlc.arg(set_tags)::boolean THEN sqlc.arg(tags)
+		ELSE tags
+	END
 WHERE datasets.uuid = sqlc.arg(uuid);
 
 -- name: DeleteDataset :execrows

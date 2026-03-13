@@ -1,0 +1,37 @@
+name: write-heavy
+base_url: http://127.0.0.1:8080
+domain: test
+token: root
+duration: 45s
+warmup: 5s
+concurrency: 12
+timeout: 10s
+headers:
+  Accept: application/json
+  Content-Type: application/json
+operations:
+  - name: write_single
+    weight: 4
+    method: POST
+    path: /v2/timeseries/{{ seriesUUID 0 }}/data?unit=C
+    body: |
+      [{"v": 3.14, "ts": "{{ nowRFC3339Nano }}"}]
+    expected_statuses: [200, 201, 204]
+  - name: write_batch_10
+    weight: 2
+    method: POST
+    path: /v2/timeseries/{{ seriesUUID 1 }}/data?unit=C
+    body: |
+      [
+        {"v": 1.00, "ts": "{{ nowRFC3339Nano }}"},
+        {"v": 1.10, "ts": "{{ nowRFC3339Nano }}"},
+        {"v": 1.20, "ts": "{{ nowRFC3339Nano }}"},
+        {"v": 1.30, "ts": "{{ nowRFC3339Nano }}"},
+        {"v": 1.40, "ts": "{{ nowRFC3339Nano }}"},
+        {"v": 1.50, "ts": "{{ nowRFC3339Nano }}"},
+        {"v": 1.60, "ts": "{{ nowRFC3339Nano }}"},
+        {"v": 1.70, "ts": "{{ nowRFC3339Nano }}"},
+        {"v": 1.80, "ts": "{{ nowRFC3339Nano }}"},
+        {"v": 1.90, "ts": "{{ nowRFC3339Nano }}"}
+      ]
+    expected_statuses: [200, 201, 204]

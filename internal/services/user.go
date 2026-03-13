@@ -25,6 +25,13 @@ type UserService struct {
 	db *sql.DB
 }
 
+type UpdateUserParams struct {
+	Name         *string
+	Groups       *[]uuid.UUID
+	GroupsAdd    []uuid.UUID
+	GroupsRemove []uuid.UUID
+}
+
 // NewUser instantiates the User repository.
 func NewUserService(db *sql.DB) *UserService {
 	return &UserService{
@@ -81,11 +88,6 @@ func (u *UserService) AddUser(ctx context.Context, name string) (*rest.User, err
 }
 
 func (u *UserService) AddTokenToUser(ctx context.Context, userUUID uuid.UUID, label string) (*rest.TokenWithSecret, error) {
-	exists, err := u.Exists(ctx, userUUID)
-	if exists == false {
-		return nil, ie.ErrorNotFound
-	}
-
 	secret := "secret-token." + RandomString(secretTokenLength)
 
 	params := postgres.AddTokenToUserParams{
@@ -125,14 +127,20 @@ func (u *UserService) AddRemoveUserToGroups(ctx context.Context, userUUID uuid.U
 		return 0, err
 	}
 
-	for _, groupUUID := range adds {
-		params := postgres.AddUserToGroupParams{
-			UserUuid:  userUUID,
-			GroupUuid: groupUUID,
-		}
-
-		err = q.AddUserToGroup(ctx, params)
+	addedCount := int64(0)
+	if len(adds) > 0 {
+		addedCount, err = q.AddUserToGroups(ctx, postgres.AddUserToGroupsParams{
+			UserUuid:   userUUID,
+			GroupUuids: adds,
+		})
 		if err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+	}
+
+	if count == 0 && addedCount == 0 {
+		if _, err := q.FindUserByUUID(ctx, userUUID); err != nil {
 			tx.Rollback()
 			return 0, err
 		}
@@ -140,7 +148,7 @@ func (u *UserService) AddRemoveUserToGroups(ctx context.Context, userUUID uuid.U
 
 	tx.Commit()
 
-	return count, nil
+	return count + addedCount, nil
 }
 
 func (u *UserService) AddUserToGroups(ctx context.Context, userUUID uuid.UUID, groupUUIDs []uuid.UUID) error {
@@ -152,14 +160,17 @@ func (u *UserService) AddUserToGroups(ctx context.Context, userUUID uuid.UUID, g
 
 	q := u.q.WithTx(tx)
 
-	for _, groupUUID := range groupUUIDs {
-		params := postgres.AddUserToGroupParams{
-			UserUuid:  userUUID,
-			GroupUuid: groupUUID,
-		}
-
-		err = q.AddUserToGroup(ctx, params)
+	if len(groupUUIDs) > 0 {
+		_, err = q.AddUserToGroups(ctx, postgres.AddUserToGroupsParams{
+			UserUuid:   userUUID,
+			GroupUuids: groupUUIDs,
+		})
 		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	} else {
+		if _, err := q.FindUserByUUID(ctx, userUUID); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -171,29 +182,34 @@ func (u *UserService) AddUserToGroups(ctx context.Context, userUUID uuid.UUID, g
 }
 
 func (u *UserService) FindUserByUuid(ctx context.Context, userUUID uuid.UUID) (*rest.User, error) {
-	user, err := u.q.FindUserByUUID(ctx, userUUID)
+	user, err := u.q.FindUserWithGroupsByUUID(ctx, userUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	ugs, err := u.q.FindGroupsByUser(ctx, user.Uuid)
+	return userWithGroupsRowToRest(user.Uuid, user.Name, user.Groups), nil
+}
+
+func (u *UserService) FindUserByToken(ctx context.Context, token []byte) (*rest.User, error) {
+	user, err := u.q.FindUserWithGroupsByToken(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 
+	return userWithGroupsRowToRest(user.Uuid, user.Name, user.Groups), nil
+}
+
+func userWithGroupsRowToRest(id uuid.UUID, name string, groupsJSON string) *rest.User {
 	userGroups := make([]rest.Group, 0)
-	for _, item := range ugs {
-		userGroups = append(userGroups, rest.Group{
-			Uuid: item.Uuid.String(),
-			Name: item.Name,
-		})
+	if err := json.Unmarshal([]byte(groupsJSON), &userGroups); err != nil {
+		// FIXME: log error
 	}
 
 	return &rest.User{
-		Uuid:   user.Uuid.String(),
-		Name:   user.Name,
+		Uuid:   id.String(),
+		Name:   name,
 		Groups: userGroups,
-	}, nil
+	}
 }
 
 func (u *UserService) GetUserUuidFromToken(ctx context.Context, token []byte) (uuid.UUID, error) {
@@ -243,16 +259,15 @@ func (u *UserService) FindAll(ctx context.Context, token []byte, limit *int64, o
 func (u *UserService) FindTokensForUser(ctx context.Context, userUUID uuid.UUID) ([]*rest.Token, error) {
 	tokens := make([]*rest.Token, 0)
 
-	count, err := u.q.ExistsUser(ctx, userUUID)
-	if err != nil {
-		return nil, err
-	} else if count == 0 {
-		return nil, ie.ErrorNotFound
-	}
-
 	tokenList, err := u.q.FindTokensByUser(ctx, userUUID)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(tokenList) == 0 {
+		if _, err := u.q.FindUserByUUID(ctx, userUUID); err != nil {
+			return nil, err
+		}
 	}
 
 	for _, v := range tokenList {
@@ -294,14 +309,98 @@ func (u *UserService) SetUserGroups(ctx context.Context, userUUID uuid.UUID, gro
 		return 0, err
 	}
 
-	for _, groupUUID := range groupUUIDs {
-		params := postgres.AddUserToGroupParams{
-			UserUuid:  userUUID,
-			GroupUuid: groupUUID,
+	addedCount := int64(0)
+	if len(groupUUIDs) > 0 {
+		addedCount, err = q.AddUserToGroups(ctx, postgres.AddUserToGroupsParams{
+			UserUuid:   userUUID,
+			GroupUuids: groupUUIDs,
+		})
+		if err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+	}
+
+	if count == 0 && addedCount == 0 {
+		if _, err := q.FindUserByUUID(ctx, userUUID); err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+	}
+
+	tx.Commit()
+
+	return count + addedCount, nil
+}
+
+func (u *UserService) UpdateUser(ctx context.Context, userUUID uuid.UUID, p UpdateUserParams) (int64, error) {
+	tx, err := u.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return 0, err
+	}
+
+	q := u.q.WithTx(tx)
+	var count int64
+
+	if p.Name != nil && len(*p.Name) > 3 {
+		c, err := q.SetUserName(ctx, postgres.SetUserNameParams{
+			Uuid: userUUID,
+			Name: *p.Name,
+		})
+		if err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+		count += c
+	}
+
+	if p.Groups != nil {
+		c, err := q.RemoveUserFromAllGroups(ctx, userUUID)
+		if err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+		count += c
+
+		if len(*p.Groups) > 0 {
+			c, err = q.AddUserToGroups(ctx, postgres.AddUserToGroupsParams{
+				UserUuid:   userUUID,
+				GroupUuids: *p.Groups,
+			})
+			if err != nil {
+				tx.Rollback()
+				return 0, err
+			}
+			count += c
+		}
+	} else {
+		if len(p.GroupsRemove) > 0 {
+			c, err := q.RemoveUserFromGroups(ctx, postgres.RemoveUserFromGroupsParams{
+				UserUuid:   userUUID,
+				GroupUuids: p.GroupsRemove,
+			})
+			if err != nil {
+				tx.Rollback()
+				return 0, err
+			}
+			count += c
 		}
 
-		err = q.AddUserToGroup(ctx, params)
-		if err != nil {
+		if len(p.GroupsAdd) > 0 {
+			c, err := q.AddUserToGroups(ctx, postgres.AddUserToGroupsParams{
+				UserUuid:   userUUID,
+				GroupUuids: p.GroupsAdd,
+			})
+			if err != nil {
+				tx.Rollback()
+				return 0, err
+			}
+			count += c
+		}
+	}
+
+	if count == 0 {
+		if _, err := q.FindUserByUUID(ctx, userUUID); err != nil {
 			tx.Rollback()
 			return 0, err
 		}

@@ -6,9 +6,10 @@ package services
 
 import (
 	"database/sql"
-	"github.com/google/uuid"
 	"math/rand"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var r *rand.Rand // Rand for this package.
@@ -137,4 +138,24 @@ func RandomString(strlen int) string {
 		result[i] = chars[r.Intn(len(chars))]
 	}
 	return string(result)
+}
+
+func nullableUUID(id *uuid.UUID) uuid.NullUUID {
+	if id == nil {
+		return uuid.NullUUID{}
+	}
+
+	return uuid.NullUUID{UUID: *id, Valid: true}
+}
+
+func nullableUUIDValue(id uuid.UUID) uuid.NullUUID {
+	return uuid.NullUUID{UUID: id, Valid: true}
+}
+
+func nullableUUIDString(id uuid.NullUUID) string {
+	if !id.Valid {
+		return ""
+	}
+
+	return id.UUID.String()
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/spf13/viper"
 
 	"github.com/self-host/self-host/api/aapije/rest"
 	ie "github.com/self-host/self-host/internal/errors"
@@ -32,15 +33,7 @@ func (ra *RestApi) AddTimeSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
-	if ok == false {
-		ie.SendHTTPError(w, ie.ErrorUndefined)
-		return
-	}
-
-	u := services.NewUserService(db)
-
-	createdByUUID, err := u.GetUserUuidFromToken(r.Context(), []byte(domaintoken.Token))
+	createdByUUID, err := ra.GetUserUUID(r)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ErrorUndefined)
 		return
@@ -100,14 +93,7 @@ func (ra *RestApi) AddDataToTimeseries(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
-	if ok == false {
-		ie.SendHTTPError(w, ie.ErrorUndefined)
-		return
-	}
-
-	u := services.NewUserService(db)
-	createdBy, err := u.GetUserUuidFromToken(r.Context(), []byte(domaintoken.Token))
+	createdBy, err := ra.GetUserUUID(r)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ErrorUndefined)
 		return
@@ -172,16 +158,6 @@ func (ra *RestApi) QueryTimeseriesForData(w http.ResponseWriter, r *http.Request
 
 	svc := services.NewTimeseriesService(db)
 
-	// Ensure the timeseries exists
-	ok, err := svc.Exists(r.Context(), tsUUID)
-	if err != nil {
-		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	} else if ok == false {
-		ie.SendHTTPError(w, ie.ErrorNotFound)
-		return
-	}
-
 	if time.Time(p.End).Sub(time.Time(p.Start)) > 31622401*time.Second {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
@@ -194,6 +170,8 @@ func (ra *RestApi) QueryTimeseriesForData(w http.ResponseWriter, r *http.Request
 		GreaterOrEq: (*float32)(p.Ge),
 		LessOrEq:    (*float32)(p.Le),
 		Unit:        (*string)(p.Unit),
+		UseRollups:  viper.GetBool("timeseries_rollups.enabled"),
+		MaxPoints:   viper.GetInt("timeseries_queries.max_points_per_series"),
 	}
 
 	if p.Timezone != nil {
@@ -204,14 +182,10 @@ func (ra *RestApi) QueryTimeseriesForData(w http.ResponseWriter, r *http.Request
 
 	if p.Aggregate != nil {
 		params.Aggregate = string(*p.Aggregate)
-	} else {
-		params.Aggregate = "avg"
 	}
 
 	if p.Precision != nil {
 		params.Precision = string(*p.Precision)
-	} else {
-		params.Precision = "microseconds"
 	}
 
 	data, err := svc.QuerySingleSourceData(r.Context(), params)
@@ -419,16 +393,6 @@ func (ra *RestApi) DeleteDataFromTimeSeries(w http.ResponseWriter, r *http.Reque
 	}
 
 	svc := services.NewTimeseriesService(db)
-
-	// Ensure the timeseries exists
-	ok, err := svc.Exists(r.Context(), tsUUID)
-	if err != nil {
-		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	} else if ok == false {
-		ie.SendHTTPError(w, ie.ErrorNotFound)
-		return
-	}
 
 	if time.Time(p.End).Sub(time.Time(p.Start)) > 31622401*time.Second {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)

@@ -73,16 +73,18 @@ func (s *PolicyService) Add(ctx context.Context, p NewPolicyParams) (*rest.Polic
 func (s *PolicyService) FindByGroup(ctx context.Context, groupUUID uuid.UUID) ([]*rest.Policy, error) {
 	policies := make([]*rest.Policy, 0)
 
-	count, err := s.q.ExistsGroup(ctx, groupUUID)
-	if err != nil {
-		return nil, err
-	} else if count == 0 {
-		return nil, ie.ErrorNotFound
-	}
-
 	policyList, err := s.q.FindPoliciesByGroup(ctx, groupUUID)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(policyList) == 0 {
+		count, err := s.q.ExistsGroup(ctx, groupUUID)
+		if err != nil {
+			return nil, err
+		} else if count == 0 {
+			return nil, ie.ErrorNotFound
+		}
 	}
 
 	for _, item := range policyList {
@@ -103,16 +105,18 @@ func (s *PolicyService) FindByGroup(ctx context.Context, groupUUID uuid.UUID) ([
 func (s *PolicyService) FindByUser(ctx context.Context, userUUID uuid.UUID) ([]*rest.Policy, error) {
 	policies := make([]*rest.Policy, 0)
 
-	count, err := s.q.ExistsUser(ctx, userUUID)
-	if err != nil {
-		return nil, err
-	} else if count == 0 {
-		return nil, ie.ErrorNotFound
-	}
-
 	policyList, err := s.q.FindPoliciesByUser(ctx, userUUID)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(policyList) == 0 {
+		count, err := s.q.ExistsUser(ctx, userUUID)
+		if err != nil {
+			return nil, err
+		} else if count == 0 {
+			return nil, ie.ErrorNotFound
+		}
 	}
 
 	for _, item := range policyList {
@@ -205,13 +209,6 @@ type UpdatePolicyParams struct {
 func (s *PolicyService) Update(ctx context.Context, id uuid.UUID, p UpdatePolicyParams) (int64, error) {
 	var count int64
 
-	found, err := s.Exists(ctx, id)
-	if err != nil {
-		return 0, err
-	} else if found == false {
-		return 0, ie.ErrorNotFound
-	}
-
 	// Use a transaction for this action
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
@@ -279,6 +276,13 @@ func (s *PolicyService) Update(ctx context.Context, id uuid.UUID, p UpdatePolicy
 			return 0, err
 		}
 		count += c
+	}
+
+	if count == 0 {
+		if _, err := q.FindPolicyByUUID(ctx, id); err != nil {
+			tx.Rollback()
+			return 0, err
+		}
 	}
 
 	tx.Commit()

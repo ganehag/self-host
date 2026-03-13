@@ -7,7 +7,11 @@ package services
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"fmt"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,12 +23,7 @@ import (
 	units "github.com/ganehag/go-units"
 )
 
-const insertDataToTimeseries = `
-INSERT INTO tsdata(ts_uuid, value, ts, created_by)
-SELECT $1::uuid, x.v, x.ts, $2::uuid
-FROM
-json_to_recordset($3::json) AS x("v" double precision, "ts" timestamptz);
-`
+const insertTimeseriesBatchSize = 256
 
 // NewTimeseries defines model for NewTimeseries.
 type NewTimeseriesParams struct {
@@ -97,6 +96,19 @@ func (svc *TimeseriesService) Exists(ctx context.Context, id uuid.UUID) (bool, e
 	return found > 0, nil
 }
 
+func (svc *TimeseriesService) ExistAll(ctx context.Context, ids []uuid.UUID) (bool, error) {
+	if len(ids) == 0 {
+		return true, nil
+	}
+
+	count, err := svc.q.CountExistingTimeseries(ctx, ids)
+	if err != nil {
+		return false, err
+	}
+
+	return count == int64(len(ids)), nil
+}
+
 func (svc *TimeseriesService) AddTimeseries(ctx context.Context, opt *NewTimeseriesParams) (*rest.Timeseries, error) {
 	// Use a transaction for this action
 	tx, err := svc.db.BeginTx(ctx, &sql.TxOptions{})
@@ -114,7 +126,7 @@ func (svc *TimeseriesService) AddTimeseries(ctx context.Context, opt *NewTimeser
 	}
 
 	params := postgres.CreateTimeseriesParams{
-		CreatedBy:  opt.CreatedBy,
+		CreatedBy:  nullableUUIDValue(opt.CreatedBy),
 		ThingUuid:  opt.ThingUuid,
 		Name:       opt.Name,
 		SiUnit:     opt.SiUnit,
@@ -144,7 +156,7 @@ func (svc *TimeseriesService) AddTimeseries(ctx context.Context, opt *NewTimeser
 
 	t := &rest.Timeseries{
 		Uuid:       timeseries.Uuid.String(),
-		CreatedBy:  timeseries.CreatedBy.String(),
+		CreatedBy:  nullableUUIDString(timeseries.CreatedBy),
 		Name:       timeseries.Name,
 		SiUnit:     timeseries.SiUnit,
 		LowerBound: lb,
@@ -152,8 +164,8 @@ func (svc *TimeseriesService) AddTimeseries(ctx context.Context, opt *NewTimeser
 		Tags:       timeseries.Tags,
 	}
 
-	if timeseries.ThingUuid != NilUUID {
-		v := timeseries.ThingUuid.String()
+	if timeseries.ThingUuid.Valid {
+		v := timeseries.ThingUuid.UUID.String()
 		t.ThingUuid = &v
 	}
 
@@ -173,7 +185,7 @@ func (svc *TimeseriesService) AddDataToTimeseries(ctx context.Context, p AddData
 		return 0, err
 	}
 
-	filteredPoints := make([]*DataPoint, 0)
+	filteredPoints := make([]DataPoint, 0, len(p.Points))
 
 	var fromUnit units.Unit
 	var toUnit units.Unit
@@ -227,25 +239,28 @@ func (svc *TimeseriesService) AddDataToTimeseries(ctx context.Context, p AddData
 			}
 		}
 
-		filteredPoints = append(filteredPoints, &pItem)
+		filteredPoints = append(filteredPoints, pItem)
 	}
 
-	data, err := json.Marshal(filteredPoints)
-	if err != nil {
-		return 0, err
+	if len(filteredPoints) == 0 {
+		return 0, nil
 	}
 
-	result, err := svc.db.ExecContext(ctx, insertDataToTimeseries, p.Uuid, p.CreatedBy, data)
-	if err != nil {
-		return 0, err
+	var totalCount int64
+	for start := 0; start < len(filteredPoints); start += insertTimeseriesBatchSize {
+		stop := start + insertTimeseriesBatchSize
+		if stop > len(filteredPoints) {
+			stop = len(filteredPoints)
+		}
+
+		count, err := insertTimeseriesBatch(ctx, svc.db, p.Uuid, p.CreatedBy, filteredPoints[start:stop])
+		if err != nil {
+			return 0, err
+		}
+		totalCount += count
 	}
 
-	count, err := result.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-
-	return count, nil
+	return totalCount, nil
 }
 
 func (svc *TimeseriesService) FindByTags(ctx context.Context, p FindByTagsParams) ([]*rest.Timeseries, error) {
@@ -279,7 +294,7 @@ func (svc *TimeseriesService) FindByTags(ctx context.Context, p FindByTagsParams
 		}
 
 		t := &rest.Timeseries{
-			CreatedBy:  item.CreatedBy.String(),
+			CreatedBy:  nullableUUIDString(item.CreatedBy),
 			LowerBound: lBound,
 			Name:       item.Name,
 			SiUnit:     item.SiUnit,
@@ -288,8 +303,8 @@ func (svc *TimeseriesService) FindByTags(ctx context.Context, p FindByTagsParams
 			Uuid:       item.Uuid.String(),
 		}
 
-		if item.ThingUuid != NilUUID {
-			v := item.ThingUuid.String()
+		if item.ThingUuid.Valid {
+			v := item.ThingUuid.UUID.String()
 			t.ThingUuid = &v
 		}
 
@@ -302,16 +317,18 @@ func (svc *TimeseriesService) FindByTags(ctx context.Context, p FindByTagsParams
 func (svc *TimeseriesService) FindByThing(ctx context.Context, thing uuid.UUID) ([]*rest.Timeseries, error) {
 	timeseries := make([]*rest.Timeseries, 0)
 
-	count, err := svc.q.ExistsThing(ctx, thing)
+	tsList, err := svc.q.FindTimeseriesByThing(ctx, nullableUUIDValue(thing))
 	if err != nil {
 		return nil, err
-	} else if count == 0 {
-		return nil, ie.ErrorNotFound
 	}
 
-	tsList, err := svc.q.FindTimeseriesByThing(ctx, thing)
-	if err != nil {
-		return nil, err
+	if len(tsList) == 0 {
+		count, err := svc.q.ExistsThing(ctx, thing)
+		if err != nil {
+			return nil, err
+		} else if count == 0 {
+			return nil, ie.ErrorNotFound
+		}
 	}
 
 	for _, item := range tsList {
@@ -326,7 +343,7 @@ func (svc *TimeseriesService) FindByThing(ctx context.Context, thing uuid.UUID) 
 		}
 
 		t := &rest.Timeseries{
-			CreatedBy:  item.CreatedBy.String(),
+			CreatedBy:  nullableUUIDString(item.CreatedBy),
 			LowerBound: lBound,
 			Name:       item.Name,
 			SiUnit:     item.SiUnit,
@@ -335,8 +352,8 @@ func (svc *TimeseriesService) FindByThing(ctx context.Context, thing uuid.UUID) 
 			Uuid:       item.Uuid.String(),
 		}
 
-		if item.ThingUuid != NilUUID {
-			v := item.ThingUuid.String()
+		if item.ThingUuid.Valid {
+			v := item.ThingUuid.UUID.String()
 			t.ThingUuid = &v
 		}
 
@@ -369,11 +386,11 @@ func (svc *TimeseriesService) FindByUuid(ctx context.Context, id uuid.UUID) (*re
 		Tags:       t.Tags,
 		LowerBound: lBound,
 		UpperBound: uBound,
-		CreatedBy:  t.CreatedBy.String(),
+		CreatedBy:  nullableUUIDString(t.CreatedBy),
 	}
 
-	if t.ThingUuid != NilUUID {
-		v := t.ThingUuid.String()
+	if t.ThingUuid.Valid {
+		v := t.ThingUuid.UUID.String()
 		timeseries.ThingUuid = &v
 	}
 
@@ -416,11 +433,11 @@ func (svc *TimeseriesService) FindAll(ctx context.Context, p FindAllParams) ([]*
 			UpperBound: uBound,
 			LowerBound: lBound,
 			Tags:       item.Tags,
-			CreatedBy:  item.CreatedBy.String(),
+			CreatedBy:  nullableUUIDString(item.CreatedBy),
 		}
 
-		if item.ThingUuid != NilUUID {
-			v := item.ThingUuid.String()
+		if item.ThingUuid.Valid {
+			v := item.ThingUuid.UUID.String()
 			t.ThingUuid = &v
 		}
 
@@ -440,6 +457,8 @@ type QuerySingleSourceDataParams struct {
 	Aggregate   string
 	Precision   string
 	Timezone    string
+	UseRollups  bool
+	MaxPoints   int
 }
 
 func (svc *TimeseriesService) QuerySingleSourceData(ctx context.Context, p QuerySingleSourceDataParams) ([]*rest.TsRow, error) {
@@ -476,18 +495,27 @@ func (svc *TimeseriesService) QuerySingleSourceData(ctx context.Context, p Query
 		return nil, err
 	}
 
-	params := postgres.GetTsDataRangeAggParams{
-		Aggregate: p.Aggregate,
-		Truncate:  p.Precision,
-		Timezone:  p.Timezone,
-		TsUuids: []uuid.UUID{
-			p.Uuid, // Expects a list of time series
-		},
-		Start: p.Start,
-		Stop:  p.End,
+	if shouldAggregateData(p.Aggregate, p.Precision) {
+		result, err := svc.querySingleSourceAggregatedData(ctx, p, tzloc, fromUnit, toUnit)
+		if err != nil {
+			return nil, err
+		}
+		if len(result) == 0 {
+			if _, err := svc.q.FindTimeseriesByUUID(ctx, p.Uuid); err != nil {
+				return nil, err
+			}
+		}
+		if err := validateSingleSeriesPointLimit(len(result), p.MaxPoints); err != nil {
+			return nil, err
+		}
+		return result, nil
 	}
 
-	dataList, err := svc.q.GetTsDataRangeAgg(ctx, params)
+	dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+		TsUuids: []uuid.UUID{p.Uuid},
+		Start:   p.Start,
+		Stop:    p.End,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -516,18 +544,30 @@ func (svc *TimeseriesService) QuerySingleSourceData(ctx context.Context, p Query
 		tsdata = append(tsdata, &d)
 	}
 
+	if len(tsdata) == 0 {
+		if _, err := svc.q.FindTimeseriesByUUID(ctx, p.Uuid); err != nil {
+			return nil, err
+		}
+	}
+	if err := validateSingleSeriesPointLimit(len(tsdata), p.MaxPoints); err != nil {
+		return nil, err
+	}
+
 	return tsdata, nil
 }
 
 type QueryMultiSourceDataParams struct {
-	Uuids       []uuid.UUID
-	Start       time.Time
-	End         time.Time
-	GreaterOrEq *float32
-	LessOrEq    *float32
-	Aggregate   string
-	Precision   string
-	Timezone    string
+	Uuids              []uuid.UUID
+	Start              time.Time
+	End                time.Time
+	GreaterOrEq        *float32
+	LessOrEq           *float32
+	Aggregate          string
+	Precision          string
+	Timezone           string
+	UseRollups         bool
+	MaxPointsPerSeries int
+	MaxTotalPoints     int
 }
 
 func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryMultiSourceDataParams) ([]*rest.TsResults, error) {
@@ -536,26 +576,261 @@ func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryM
 		return nil, ie.NewInvalidRequestError(err)
 	}
 
-	params := postgres.GetTsDataRangeAggParams{
-		Aggregate: p.Aggregate,
-		Truncate:  p.Precision,
-		Timezone:  p.Timezone,
-		TsUuids:   p.Uuids,
-		Start:     p.Start,
-		Stop:      p.End,
+	mapping := make(map[uuid.UUID][]rest.TsRow, len(p.Uuids))
+	if shouldAggregateData(p.Aggregate, p.Precision) {
+		mapping, err = svc.queryMultiSourceAggregatedData(ctx, p, tzloc)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+			TsUuids: p.Uuids,
+			Start:   p.Start,
+			Stop:    p.End,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := appendRawMultiSourceRows(mapping, dataList, p, tzloc); err != nil {
+			return nil, err
+		}
 	}
 
-	mapping := make(map[uuid.UUID][]rest.TsRow, 0)
-	dataList, err := svc.q.GetTsDataRangeAgg(ctx, params)
+	tsResult := make([]*rest.TsResults, 0)
+	seen := make(map[uuid.UUID]struct{}, len(p.Uuids))
+	for _, key := range p.Uuids {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		data, ok := mapping[key]
+		if ok == false {
+			continue
+		}
+
+		tsResult = append(tsResult, &rest.TsResults{
+			Uuid: key.String(),
+			Data: data,
+		})
+	}
+
+	return tsResult, nil
+}
+
+func (svc *TimeseriesService) querySingleSourceAggregatedData(ctx context.Context, p QuerySingleSourceDataParams, tzloc *time.Location, fromUnit, toUnit units.Unit) ([]*rest.TsRow, error) {
+	if canUseHourlyRollups(p.UseRollups, p.Timezone, p.Precision) {
+		rawRows, rollupRows, err := svc.loadAggregateSources(ctx, []uuid.UUID{p.Uuid}, p.Start, p.End)
+		if err != nil {
+			return nil, err
+		}
+		return aggregateSingleSourceFromSources(rawRows, rollupRows, p, tzloc, fromUnit, toUnit)
+	}
+
+	dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+		TsUuids: []uuid.UUID{p.Uuid},
+		Start:   p.Start,
+		Stop:    p.End,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	for _, item := range dataList {
-		if _, ok := mapping[item.TsUuid]; ok == false {
-			mapping[item.TsUuid] = make([]rest.TsRow, 0)
+	return aggregateSingleSourceRows(dataList, p, tzloc, fromUnit, toUnit)
+}
+
+func (svc *TimeseriesService) queryMultiSourceAggregatedData(ctx context.Context, p QueryMultiSourceDataParams, tzloc *time.Location) (map[uuid.UUID][]rest.TsRow, error) {
+	if canUseHourlyRollups(p.UseRollups, p.Timezone, p.Precision) {
+		rawRows, rollupRows, err := svc.loadAggregateSources(ctx, p.Uuids, p.Start, p.End)
+		if err != nil {
+			return nil, err
+		}
+		return aggregateMultiSourceFromSources(rawRows, rollupRows, p, tzloc)
+	}
+
+	dataList, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+		TsUuids: p.Uuids,
+		Start:   p.Start,
+		Stop:    p.End,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return aggregateMultiSourceRows(dataList, p, tzloc)
+}
+
+func (svc *TimeseriesService) loadAggregateSources(ctx context.Context, uuids []uuid.UUID, start, end time.Time) ([]postgres.GetTsDataRangeRow, []postgres.TsdataHourlyRollup, error) {
+	rollupRange, rawRanges := splitHourlyRollupRanges(start, end)
+
+	rawRows := make([]postgres.GetTsDataRangeRow, 0)
+	for _, rawRange := range rawRanges {
+		rows, err := svc.q.GetTsDataRange(ctx, postgres.GetTsDataRangeParams{
+			TsUuids: uuids,
+			Start:   rawRange.Start,
+			Stop:    rawRange.Stop,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		rawRows = append(rawRows, rows...)
+	}
+
+	if rollupRange == nil {
+		return rawRows, nil, nil
+	}
+
+	rollupRows, err := svc.q.GetTsHourlyRollupRange(ctx, postgres.GetTsHourlyRollupRangeParams{
+		TsUuids: uuids,
+		Start:   rollupRange.Start,
+		Stop:    rollupRange.Stop,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return rawRows, rollupRows, nil
+}
+
+func shouldAggregateData(aggregate, precision string) bool {
+	return strings.TrimSpace(precision) != "" && strings.TrimSpace(aggregate) != ""
+}
+
+func insertTimeseriesBatch(ctx context.Context, db *sql.DB, tsUUID, createdBy uuid.UUID, points []DataPoint) (int64, error) {
+	var query strings.Builder
+	args := make([]any, 0, len(points)*4)
+
+	query.WriteString("INSERT INTO tsdata(ts_uuid, value, ts, created_by) VALUES ")
+	for i, point := range points {
+		if i > 0 {
+			query.WriteString(",")
 		}
 
+		base := i*4 + 1
+		query.WriteString("(")
+		query.WriteString("$")
+		query.WriteString(strconv.Itoa(base))
+		query.WriteString(",$")
+		query.WriteString(strconv.Itoa(base + 1))
+		query.WriteString(",$")
+		query.WriteString(strconv.Itoa(base + 2))
+		query.WriteString(",$")
+		query.WriteString(strconv.Itoa(base + 3))
+		query.WriteString(")")
+
+		args = append(args, tsUUID, point.Value, point.Timestamp, createdBy)
+	}
+
+	result, err := db.ExecContext(ctx, query.String(), args...)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.RowsAffected()
+}
+
+type aggregateBucket struct {
+	ts    time.Time
+	count int64
+	sum   float64
+	min   float64
+	max   float64
+}
+
+func aggregateSingleSourceRows(rows []postgres.GetTsDataRangeRow, p QuerySingleSourceDataParams, tzloc *time.Location, fromUnit, toUnit units.Unit) ([]*rest.TsRow, error) {
+	buckets := make(map[time.Time]*aggregateBucket, len(rows))
+	keys := make([]time.Time, 0, len(rows))
+
+	for _, item := range rows {
+		bucketTs, err := truncateTime(item.Ts, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+
+		bucket := buckets[bucketTs]
+		if bucket == nil {
+			bucket = &aggregateBucket{
+				ts:  bucketTs,
+				min: item.Value,
+				max: item.Value,
+			}
+			buckets[bucketTs] = bucket
+			keys = append(keys, bucketTs)
+		}
+
+		bucket.count++
+		bucket.sum += item.Value
+		if item.Value < bucket.min {
+			bucket.min = item.Value
+		}
+		if item.Value > bucket.max {
+			bucket.max = item.Value
+		}
+	}
+
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].Before(keys[j])
+	})
+
+	result := make([]*rest.TsRow, 0, len(keys))
+	for _, key := range keys {
+		bucket := buckets[key]
+		value, err := aggregateBucketValue(bucket, p.Aggregate)
+		if err != nil {
+			return nil, err
+		}
+
+		var f float32
+		if p.Unit != nil {
+			v := units.NewValue(value, fromUnit)
+			conv, err := v.Convert(toUnit)
+			if err != nil {
+				return nil, ie.ErrorInvalidUnitConversion
+			}
+			f = float32(conv.Float())
+		} else {
+			f = float32(value)
+		}
+
+		if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+			continue
+		}
+
+		result = append(result, &rest.TsRow{
+			V:  f,
+			Ts: bucket.ts.In(tzloc),
+		})
+	}
+
+	return result, nil
+}
+
+func aggregateSingleSourceFromSources(rawRows []postgres.GetTsDataRangeRow, rollupRows []postgres.TsdataHourlyRollup, p QuerySingleSourceDataParams, tzloc *time.Location, fromUnit, toUnit units.Unit) ([]*rest.TsRow, error) {
+	buckets := make(map[time.Time]*aggregateBucket, len(rawRows)+len(rollupRows))
+	keys := make([]time.Time, 0, len(rawRows)+len(rollupRows))
+
+	for _, item := range rawRows {
+		bucketTs, err := truncateTime(item.Ts, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+		accumulateAggregateBucket(buckets, &keys, bucketTs, 1, item.Value, item.Value, item.Value)
+	}
+
+	for _, item := range rollupRows {
+		bucketTs, err := truncateTime(item.BucketTs, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+		accumulateAggregateBucket(buckets, &keys, bucketTs, item.SampleCount, item.SampleSum, item.SampleMin, item.SampleMax)
+	}
+
+	return buildSingleSourceAggregateResult(buckets, keys, p, tzloc, fromUnit, toUnit)
+}
+
+func appendRawMultiSourceRows(mapping map[uuid.UUID][]rest.TsRow, rows []postgres.GetTsDataRangeRow, p QueryMultiSourceDataParams, tzloc *time.Location) error {
+	totalPoints := 0
+	for _, item := range rows {
 		f := float32(item.Value)
 
 		if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
@@ -566,17 +841,392 @@ func (svc *TimeseriesService) QueryMultiSourceData(ctx context.Context, p QueryM
 			V:  f,
 			Ts: item.Ts.In(tzloc),
 		})
+
+		totalPoints++
+		if err := validateMultiSeriesLimits(len(mapping[item.TsUuid]), totalPoints, p); err != nil {
+			return err
+		}
 	}
 
-	tsResult := make([]*rest.TsResults, 0)
-	for key, data := range mapping {
-		tsResult = append(tsResult, &rest.TsResults{
-			Uuid: key.String(),
-			Data: data,
+	for key := range mapping {
+		sort.Slice(mapping[key], func(i, j int) bool {
+			return mapping[key][i].Ts.Before(mapping[key][j].Ts)
 		})
 	}
 
-	return tsResult, nil
+	return nil
+}
+
+func aggregateMultiSourceRows(rows []postgres.GetTsDataRangeRow, p QueryMultiSourceDataParams, tzloc *time.Location) (map[uuid.UUID][]rest.TsRow, error) {
+	mapping := make(map[uuid.UUID][]rest.TsRow, len(p.Uuids))
+	if len(rows) == 0 {
+		return mapping, nil
+	}
+
+	bucketsBySeries := make(map[uuid.UUID]map[time.Time]*aggregateBucket, len(p.Uuids))
+	keysBySeries := make(map[uuid.UUID][]time.Time, len(p.Uuids))
+	totalPoints := 0
+
+	for _, item := range rows {
+		bucketTs, err := truncateTime(item.Ts, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+
+		seriesBuckets := bucketsBySeries[item.TsUuid]
+		if seriesBuckets == nil {
+			seriesBuckets = make(map[time.Time]*aggregateBucket)
+			bucketsBySeries[item.TsUuid] = seriesBuckets
+		}
+
+		bucket := seriesBuckets[bucketTs]
+		if bucket == nil {
+			bucket = &aggregateBucket{
+				ts:  bucketTs,
+				min: item.Value,
+				max: item.Value,
+			}
+			seriesBuckets[bucketTs] = bucket
+			keysBySeries[item.TsUuid] = append(keysBySeries[item.TsUuid], bucketTs)
+		}
+
+		bucket.count++
+		bucket.sum += item.Value
+		if item.Value < bucket.min {
+			bucket.min = item.Value
+		}
+		if item.Value > bucket.max {
+			bucket.max = item.Value
+		}
+	}
+
+	for seriesID, keys := range keysBySeries {
+		sort.Slice(keys, func(i, j int) bool {
+			return keys[i].Before(keys[j])
+		})
+
+		rows := make([]rest.TsRow, 0, len(keys))
+		for _, key := range keys {
+			value, err := aggregateBucketValue(bucketsBySeries[seriesID][key], p.Aggregate)
+			if err != nil {
+				return nil, err
+			}
+
+			f := float32(value)
+			if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+				continue
+			}
+
+			rows = append(rows, rest.TsRow{
+				V:  f,
+				Ts: key.In(tzloc),
+			})
+		}
+
+		if len(rows) > 0 {
+			totalPoints += len(rows)
+			if err := validateMultiSeriesLimits(len(rows), totalPoints, p); err != nil {
+				return nil, err
+			}
+			mapping[seriesID] = rows
+		}
+	}
+
+	return mapping, nil
+}
+
+func aggregateMultiSourceFromSources(rawRows []postgres.GetTsDataRangeRow, rollupRows []postgres.TsdataHourlyRollup, p QueryMultiSourceDataParams, tzloc *time.Location) (map[uuid.UUID][]rest.TsRow, error) {
+	mapping := make(map[uuid.UUID][]rest.TsRow, len(p.Uuids))
+	bucketsBySeries := make(map[uuid.UUID]map[time.Time]*aggregateBucket, len(p.Uuids))
+	keysBySeries := make(map[uuid.UUID][]time.Time, len(p.Uuids))
+
+	for _, item := range rawRows {
+		bucketTs, err := truncateTime(item.Ts, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+		accumulateSeriesAggregateBucket(bucketsBySeries, keysBySeries, item.TsUuid, bucketTs, 1, item.Value, item.Value, item.Value)
+	}
+
+	for _, item := range rollupRows {
+		bucketTs, err := truncateTime(item.BucketTs, p.Precision, tzloc)
+		if err != nil {
+			return nil, err
+		}
+		accumulateSeriesAggregateBucket(bucketsBySeries, keysBySeries, item.TsUuid, bucketTs, item.SampleCount, item.SampleSum, item.SampleMin, item.SampleMax)
+	}
+
+	totalPoints := 0
+	for seriesID, keys := range keysBySeries {
+		sort.Slice(keys, func(i, j int) bool {
+			return keys[i].Before(keys[j])
+		})
+
+		rows := make([]rest.TsRow, 0, len(keys))
+		for _, key := range keys {
+			value, err := aggregateBucketValue(bucketsBySeries[seriesID][key], p.Aggregate)
+			if err != nil {
+				return nil, err
+			}
+
+			f := float32(value)
+			if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+				continue
+			}
+
+			rows = append(rows, rest.TsRow{
+				V:  f,
+				Ts: key.In(tzloc),
+			})
+		}
+
+		if len(rows) > 0 {
+			totalPoints += len(rows)
+			if err := validateMultiSeriesLimits(len(rows), totalPoints, p); err != nil {
+				return nil, err
+			}
+			mapping[seriesID] = rows
+		}
+	}
+
+	return mapping, nil
+}
+
+func buildSingleSourceAggregateResult(buckets map[time.Time]*aggregateBucket, keys []time.Time, p QuerySingleSourceDataParams, tzloc *time.Location, fromUnit, toUnit units.Unit) ([]*rest.TsRow, error) {
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].Before(keys[j])
+	})
+
+	result := make([]*rest.TsRow, 0, len(keys))
+	for _, key := range keys {
+		bucket := buckets[key]
+		value, err := aggregateBucketValue(bucket, p.Aggregate)
+		if err != nil {
+			return nil, err
+		}
+
+		var f float32
+		if p.Unit != nil {
+			v := units.NewValue(value, fromUnit)
+			conv, err := v.Convert(toUnit)
+			if err != nil {
+				return nil, ie.ErrorInvalidUnitConversion
+			}
+			f = float32(conv.Float())
+		} else {
+			f = float32(value)
+		}
+
+		if inValidRange(f, p.LessOrEq, p.GreaterOrEq) == false {
+			continue
+		}
+
+		result = append(result, &rest.TsRow{
+			V:  f,
+			Ts: bucket.ts.In(tzloc),
+		})
+	}
+
+	return result, nil
+}
+
+func accumulateAggregateBucket(buckets map[time.Time]*aggregateBucket, keys *[]time.Time, bucketTs time.Time, count int64, sum, min, max float64) {
+	bucket := buckets[bucketTs]
+	if bucket == nil {
+		bucket = &aggregateBucket{
+			ts:  bucketTs,
+			min: min,
+			max: max,
+		}
+		buckets[bucketTs] = bucket
+		*keys = append(*keys, bucketTs)
+	}
+
+	bucket.count += count
+	bucket.sum += sum
+	if min < bucket.min {
+		bucket.min = min
+	}
+	if max > bucket.max {
+		bucket.max = max
+	}
+}
+
+func accumulateSeriesAggregateBucket(bucketsBySeries map[uuid.UUID]map[time.Time]*aggregateBucket, keysBySeries map[uuid.UUID][]time.Time, seriesID uuid.UUID, bucketTs time.Time, count int64, sum, min, max float64) {
+	seriesBuckets := bucketsBySeries[seriesID]
+	if seriesBuckets == nil {
+		seriesBuckets = make(map[time.Time]*aggregateBucket)
+		bucketsBySeries[seriesID] = seriesBuckets
+	}
+
+	bucket := seriesBuckets[bucketTs]
+	if bucket == nil {
+		bucket = &aggregateBucket{
+			ts:  bucketTs,
+			min: min,
+			max: max,
+		}
+		seriesBuckets[bucketTs] = bucket
+		keysBySeries[seriesID] = append(keysBySeries[seriesID], bucketTs)
+	}
+
+	bucket.count += count
+	bucket.sum += sum
+	if min < bucket.min {
+		bucket.min = min
+	}
+	if max > bucket.max {
+		bucket.max = max
+	}
+}
+
+func validateSingleSeriesPointLimit(points, maxPoints int) error {
+	if maxPoints > 0 && points > maxPoints {
+		return ie.NewHTTPError(nil, http.StatusRequestEntityTooLarge, fmt.Sprintf("timeseries query returned %d points, limit is %d", points, maxPoints))
+	}
+	return nil
+}
+
+func validateMultiSeriesLimits(seriesPoints, totalPoints int, p QueryMultiSourceDataParams) error {
+	if p.MaxPointsPerSeries > 0 && seriesPoints > p.MaxPointsPerSeries {
+		return ie.NewHTTPError(nil, http.StatusRequestEntityTooLarge, fmt.Sprintf("timeseries query returned more than %d points for one series", p.MaxPointsPerSeries))
+	}
+	if p.MaxTotalPoints > 0 && totalPoints > p.MaxTotalPoints {
+		return ie.NewHTTPError(nil, http.StatusRequestEntityTooLarge, fmt.Sprintf("timeseries query returned more than %d total points", p.MaxTotalPoints))
+	}
+	return nil
+}
+
+func aggregateBucketValue(bucket *aggregateBucket, aggregate string) (float64, error) {
+	switch aggregate {
+	case "avg":
+		if bucket.count == 0 {
+			return 0, nil
+		}
+		return bucket.sum / float64(bucket.count), nil
+	case "min":
+		return bucket.min, nil
+	case "max":
+		return bucket.max, nil
+	case "count":
+		return float64(bucket.count), nil
+	case "sum":
+		return bucket.sum, nil
+	default:
+		return 0, ie.NewInvalidRequestError(fmt.Errorf("unsupported aggregate %q", aggregate))
+	}
+}
+
+type timeRange struct {
+	Start time.Time
+	Stop  time.Time
+}
+
+func canUseHourlyRollups(enabled bool, timezone, precision string) bool {
+	if enabled == false || timezone != "UTC" {
+		return false
+	}
+
+	switch precision {
+	case "hour", "day", "week", "month", "year", "decade", "century", "millennia":
+		return true
+	default:
+		return false
+	}
+}
+
+func splitHourlyRollupRanges(start, end time.Time) (*timeRange, []timeRange) {
+	if end.Before(start) {
+		return nil, nil
+	}
+
+	firstFullHour := start.Truncate(time.Hour)
+	if firstFullHour.Before(start) {
+		firstFullHour = firstFullHour.Add(time.Hour)
+	}
+
+	lastFullHour := end.Truncate(time.Hour)
+	if lastFullHour.Add(time.Hour).After(end.Add(time.Microsecond)) {
+		lastFullHour = lastFullHour.Add(-time.Hour)
+	}
+
+	if lastFullHour.Before(firstFullHour) {
+		return nil, []timeRange{{Start: start, Stop: end}}
+	}
+
+	rawRanges := make([]timeRange, 0, 2)
+	if start.Before(firstFullHour) {
+		rawRanges = append(rawRanges, timeRange{
+			Start: start,
+			Stop:  firstFullHour.Add(-time.Microsecond),
+		})
+	}
+
+	rightStart := lastFullHour.Add(time.Hour)
+	if rightStart.Before(end) || rightStart.Equal(end) {
+		rawRanges = append(rawRanges, timeRange{
+			Start: rightStart,
+			Stop:  end,
+		})
+	}
+
+	return &timeRange{Start: firstFullHour, Stop: lastFullHour}, rawRanges
+}
+
+func truncateTime(ts time.Time, precision string, loc *time.Location) (time.Time, error) {
+	local := ts.In(loc)
+
+	switch precision {
+	case "microseconds":
+		return local.Truncate(time.Microsecond), nil
+	case "milliseconds":
+		return local.Truncate(time.Millisecond), nil
+	case "second":
+		return local.Truncate(time.Second), nil
+	case "minute":
+		return local.Truncate(time.Minute), nil
+	case "minute5":
+		return truncateByMinuteStep(local, 5), nil
+	case "minute10":
+		return truncateByMinuteStep(local, 10), nil
+	case "minute15":
+		return truncateByMinuteStep(local, 15), nil
+	case "minute20":
+		return truncateByMinuteStep(local, 20), nil
+	case "minute30":
+		return truncateByMinuteStep(local, 30), nil
+	case "hour":
+		return local.Truncate(time.Hour), nil
+	case "day":
+		return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc), nil
+	case "week":
+		return truncateWeek(local), nil
+	case "month":
+		return time.Date(local.Year(), local.Month(), 1, 0, 0, 0, 0, loc), nil
+	case "year":
+		return time.Date(local.Year(), time.January, 1, 0, 0, 0, 0, loc), nil
+	case "decade":
+		return time.Date((local.Year()/10)*10, time.January, 1, 0, 0, 0, 0, loc), nil
+	case "century":
+		return time.Date(((local.Year()-1)/100)*100+1, time.January, 1, 0, 0, 0, 0, loc), nil
+	case "millennia":
+		return time.Date(((local.Year()-1)/1000)*1000+1, time.January, 1, 0, 0, 0, 0, loc), nil
+	default:
+		return time.Time{}, ie.NewInvalidRequestError(fmt.Errorf("unsupported precision %q", precision))
+	}
+}
+
+func truncateByMinuteStep(ts time.Time, step int) time.Time {
+	return time.Date(ts.Year(), ts.Month(), ts.Day(), ts.Hour(), (ts.Minute()/step)*step, 0, 0, ts.Location())
+}
+
+func truncateWeek(ts time.Time) time.Time {
+	weekday := int(ts.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	start := ts.AddDate(0, 0, -(weekday - 1))
+	return time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, ts.Location())
 }
 
 type UpdateTimeseriesParams struct {
@@ -631,7 +1281,7 @@ func (svc *TimeseriesService) UpdateTimeseries(ctx context.Context, p UpdateTime
 	if p.ThingUuid != nil {
 		params := postgres.SetTimeseriesThingParams{
 			Uuid:      p.Uuid,
-			ThingUuid: *p.ThingUuid,
+			ThingUuid: nullableUUID(p.ThingUuid),
 		}
 		c, err := q.SetTimeseriesThing(ctx, params)
 		if err != nil {

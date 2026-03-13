@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -16,110 +17,84 @@ import (
 )
 
 type visitor struct {
-	sync.Mutex
 	limiter  *rate.Limiter
-	lastSeen time.Time
-}
-
-func (v *visitor) SetLimiter(r *rate.Limiter) {
-	v.Lock()
-	defer v.Unlock()
-	v.limiter = r
-}
-
-func (v *visitor) GetLimiter() *rate.Limiter {
-	v.Lock()
-	defer v.Unlock()
-	return v.limiter
-}
-
-func (v *visitor) SetLastSeen(t time.Time) {
-	v.Lock()
-	defer v.Unlock()
-	v.lastSeen = t
-}
-
-func (v *visitor) GetLastSeen() time.Time {
-	v.Lock()
-	defer v.Unlock()
-	return v.lastSeen
+	lastSeen atomic.Int64
 }
 
 type visitorController struct {
-	sync.RWMutex
-
-	visitors map[string]*visitor
+	visitors sync.Map
 
 	rateLimit       int
 	maxBurst        int
 	cleanUpInterval time.Duration
+	tickInterval    time.Duration
 }
 
 // Retrieve and return the rate limiter for the current visitor if it
 // already exists. Otherwise create a new rate limiter and add it to
 // the visitors map, using the API token as the key.
 func (c *visitorController) GetVisitor(token string) (*rate.Limiter, time.Time) {
-	c.RLock()
-	v, exists := c.visitors[token]
-	c.RUnlock()
-
-	if !exists {
-		// Should this be a viper config?
-		lastSeen := time.Now()
-
-		c.RLock()
-		rt := rate.Every(time.Hour / time.Duration(c.rateLimit))
-		limiter := rate.NewLimiter(rt, c.maxBurst)
-		c.RUnlock()
-
-		c.Lock()
-		c.visitors[token] = &visitor{
-			limiter:  limiter,
-			lastSeen: lastSeen,
-		}
-		c.Unlock()
-		return limiter, lastSeen
+	now := time.Now()
+	if existing, ok := c.visitors.Load(token); ok {
+		v := existing.(*visitor)
+		v.lastSeen.Store(now.UnixNano())
+		return v.limiter, now
 	}
 
-	v.SetLastSeen(time.Now())
+	rt := rate.Every(time.Hour / time.Duration(c.rateLimit))
+	candidate := &visitor{
+		limiter: rate.NewLimiter(rt, c.maxBurst),
+	}
+	candidate.lastSeen.Store(now.UnixNano())
 
-	return v.GetLimiter(), v.GetLastSeen()
+	actual, _ := c.visitors.LoadOrStore(token, candidate)
+	v := actual.(*visitor)
+	v.lastSeen.Store(now.UnixNano())
+	return v.limiter, now
 }
 
 // Background task
 func (c *visitorController) Start() {
 	go func() {
+		ticker := time.NewTicker(c.tickInterval)
+		defer ticker.Stop()
+
 		for {
-			select {
-			case <-time.After(time.Minute / 10.0):
-				c.Lock()
-				for token, v := range c.visitors {
-					if v == nil || time.Since(v.GetLastSeen()) > c.cleanUpInterval {
-						delete(c.visitors, token)
-					}
+			<-ticker.C
+
+			cutoff := time.Now().Add(-c.cleanUpInterval).UnixNano()
+			c.visitors.Range(func(key, value any) bool {
+				v, ok := value.(*visitor)
+				if !ok || v == nil || v.lastSeen.Load() < cutoff {
+					c.visitors.Delete(key)
 				}
-				c.Unlock()
-			}
+				return true
+			})
 		}
 	}()
 }
 
 func newVisitorController(r, b int, cleanUp time.Duration) *visitorController {
+	tickInterval := time.Minute / 10
+	if cleanUp > 0 && cleanUp < tickInterval {
+		tickInterval = cleanUp
+	}
+
 	return &visitorController{
-		visitors:        make(map[string]*visitor),
 		rateLimit:       r,
 		maxBurst:        b,
 		cleanUpInterval: cleanUp,
+		tickInterval:    tickInterval,
 	}
 }
 
 // Rate control middleware
-func RateControl(reqPerHour int, maxburst int, cleanup time.Duration) func(http.HandlerFunc) http.HandlerFunc {
+func RateControl(reqPerHour int, maxburst int, cleanup time.Duration) func(http.Handler) http.Handler {
 	// FIXME: From config, somehow.
 	vc := newVisitorController(reqPerHour, maxburst, cleanup)
 	vc.Start()
 
-	return func(next http.HandlerFunc) http.HandlerFunc {
+	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			domain, apiKey, ok := r.BasicAuth()
 			if ok == false {

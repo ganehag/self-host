@@ -46,33 +46,37 @@ SELECT * FROM usr;
 
 -- name: AddTokenToUser :one
 INSERT INTO user_tokens(user_uuid, name, token_hash)
-VALUES (sqlc.arg(user_uuid), sqlc.arg(name), sha256(sqlc.arg(secret)))
+SELECT users.uuid, sqlc.arg(name), sha256(sqlc.arg(secret))
+FROM users
+WHERE users.uuid = sqlc.arg(user_uuid)
 RETURNING *;
 
 -- name: FindUsers :many
 WITH usr AS (
-	SELECT users.uuid
-	FROM users, user_tokens
-	WHERE user_tokens.user_uuid = users.uuid
-	AND user_tokens.token_hash = sha256(sqlc.arg(token))
+	SELECT user_tokens.user_uuid AS uuid
+	FROM user_tokens
+	WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
 	LIMIT 1
-), policies AS (
-	SELECT group_policies.effect, group_policies.priority, group_policies.resource
-	FROM group_policies, user_groups
-	WHERE user_groups.group_uuid = group_policies.group_uuid
-	AND user_groups.user_uuid = (SELECT uuid FROM usr)
-	AND action = 'read'
 ), partial_users AS (
 	SELECT *
 	FROM users
-	WHERE 'users/'||users.uuid LIKE ANY(
-		(SELECT resource FROM policies WHERE effect = 'allow')
+	WHERE EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'allow'
+		AND ('users/'||users.uuid) LIKE group_policies.resource
 	)
-	EXCEPT
-	SELECT *
-	FROM users
-	WHERE 'users/'||users.uuid LIKE ANY(
-		(SELECT resource FROM policies WHERE effect = 'deny')
+	AND NOT EXISTS (
+		SELECT 1
+		FROM usr
+		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
+		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+		WHERE group_policies.action = 'read'
+		AND group_policies.effect = 'deny'
+		AND ('users/'||users.uuid) LIKE group_policies.resource
 	)
 	ORDER BY name
 	LIMIT sqlc.arg(arg_limit)::BIGINT
@@ -92,6 +96,33 @@ FROM users
 WHERE users.uuid = sqlc.arg(uuid)
 LIMIT 1;
 
+-- name: FindUserWithGroupsByUUID :one
+SELECT
+	users.*,
+	(COALESCE((
+		SELECT json_agg(json_build_object('uuid', groups.uuid, 'name', groups.name))
+		FROM user_groups
+		INNER JOIN groups ON groups.uuid = user_groups.group_uuid
+		WHERE users.uuid = user_groups.user_uuid
+	), '[]')::text) AS groups
+FROM users
+WHERE users.uuid = sqlc.arg(uuid)
+LIMIT 1;
+
+-- name: FindUserWithGroupsByToken :one
+SELECT
+	users.*,
+	(COALESCE((
+		SELECT json_agg(json_build_object('uuid', groups.uuid, 'name', groups.name))
+		FROM user_groups
+		INNER JOIN groups ON groups.uuid = user_groups.group_uuid
+		WHERE users.uuid = user_groups.user_uuid
+	), '[]')::text) AS groups
+FROM users
+INNER JOIN user_tokens ON user_tokens.user_uuid = users.uuid
+WHERE user_tokens.token_hash = sha256(sqlc.arg(token))
+LIMIT 1;
+
 -- name: FindTokensByUser :many
 SELECT uuid, name, created
 FROM user_tokens
@@ -109,6 +140,13 @@ VALUES(
 	sqlc.arg(user_uuid)::uuid,
 	sqlc.arg(group_uuid)::uuid
 );
+
+-- name: AddUserToGroups :execrows
+INSERT INTO user_groups(user_uuid, group_uuid)
+SELECT users.uuid, input.group_uuid
+FROM users
+INNER JOIN UNNEST(sqlc.arg(group_uuids)::uuid[]) AS input(group_uuid) ON TRUE
+WHERE users.uuid = sqlc.arg(user_uuid);
 
 -- name: SetUserName :execrows
 UPDATE users SET name = sqlc.arg(name)

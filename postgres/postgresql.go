@@ -14,6 +14,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
@@ -33,6 +34,13 @@ type DBConnection struct {
 	ConnectionString string
 
 	quit chan struct{}
+}
+
+type PoolConfig struct {
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
 }
 
 func (c *DBConnection) Equals(d *DBConnection) bool {
@@ -67,6 +75,8 @@ func (c *DBConnection) Connect() {
 				conn, err := sql.Open("pgx", connStr)
 				if err != nil {
 					logger.Error("unable to connect to DB", zap.String("domain", domain), zap.Error(err))
+				} else {
+					applyPoolConfig(conn, getPoolConfig())
 				}
 				c.Lock()
 				c.C = conn
@@ -84,6 +94,9 @@ func (c *DBConnection) Connect() {
 					if err != nil {
 						// Unable to ping the DB, set the DB handle to nil
 						c.Lock()
+						if c.C != nil {
+							c.C.Close()
+						}
 						c.C = nil
 						c.Unlock()
 
@@ -105,6 +118,10 @@ func (c *DBConnection) Close() {
 	if c.quit != nil {
 		close(c.quit)
 		c.quit = nil
+	}
+	if c.C != nil {
+		c.C.Close()
+		c.C = nil
 	}
 }
 
@@ -219,6 +236,40 @@ func GetDB(domain string) (*sql.DB, error) {
 	}
 
 	return c, nil
+}
+
+func getPoolConfig() PoolConfig {
+	cfg := PoolConfig{
+		MaxOpenConns:    viper.GetInt("db_pool.max_open_conns"),
+		MaxIdleConns:    viper.GetInt("db_pool.max_idle_conns"),
+		ConnMaxLifetime: viper.GetDuration("db_pool.conn_max_lifetime"),
+		ConnMaxIdleTime: viper.GetDuration("db_pool.conn_max_idle_time"),
+	}
+
+	if cfg.MaxOpenConns <= 0 {
+		cfg.MaxOpenConns = 25
+	}
+	if cfg.MaxIdleConns <= 0 {
+		cfg.MaxIdleConns = 10
+	}
+	if cfg.MaxIdleConns > cfg.MaxOpenConns {
+		cfg.MaxIdleConns = cfg.MaxOpenConns
+	}
+	if cfg.ConnMaxLifetime <= 0 {
+		cfg.ConnMaxLifetime = 30 * time.Minute
+	}
+	if cfg.ConnMaxIdleTime <= 0 {
+		cfg.ConnMaxIdleTime = 5 * time.Minute
+	}
+
+	return cfg
+}
+
+func applyPoolConfig(conn *sql.DB, cfg PoolConfig) {
+	conn.SetMaxOpenConns(cfg.MaxOpenConns)
+	conn.SetMaxIdleConns(cfg.MaxIdleConns)
+	conn.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	conn.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 }
 
 func GetAllDB() []DomainDB {

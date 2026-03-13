@@ -9,8 +9,8 @@ import (
 )
 
 // Set the response header
-func SetHeader(key, value string) func(http.HandlerFunc) http.HandlerFunc {
-	return func(next http.HandlerFunc) http.HandlerFunc {
+func SetHeader(key, value string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set(key, value)
 			next.ServeHTTP(w, r)

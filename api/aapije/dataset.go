@@ -5,13 +5,16 @@
 package aapije
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/self-host/self-host/api/aapije/rest"
 	ie "github.com/self-host/self-host/internal/errors"
 	"github.com/self-host/self-host/internal/services"
+	"github.com/spf13/viper"
 )
 
 // AddDatasets adds a new dataset
@@ -29,14 +32,11 @@ func (ra *RestApi) AddDatasets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
-	if ok == false {
+	createdBy, err := ra.GetUserUUID(r)
+	if err != nil {
 		ie.SendHTTPError(w, ie.ErrorUndefined)
 		return
 	}
-
-	u := services.NewUserService(db)
-	createdBy, err := u.GetUserUuidFromToken(r.Context(), []byte(domaintoken.Token))
 
 	s := services.NewDatasetService(db)
 
@@ -199,12 +199,9 @@ func (ra *RestApi) UpdateDatasetByUuid(w http.ResponseWriter, r *http.Request, i
 		params.Format = &s
 	}
 
-	count, err := svc.UpdateDatasetByUuid(r.Context(), datasetUUID, params)
+	_, err = svc.UpdateDatasetByUuid(r.Context(), datasetUUID, params)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	} else if count == 0 {
-		ie.SendHTTPError(w, ie.ErrorNotFound)
 		return
 	}
 
@@ -274,29 +271,165 @@ func (ra *RestApi) GetRawDatasetByUuid(w http.ResponseWriter, r *http.Request, i
 
 // InitializeDatasetUploadByUuid initiates the upload of a larger dataset
 func (ra *RestApi) InitializeDatasetUploadByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	w.WriteHeader(http.StatusNotImplemented)
+	datasetUUID, err := uuid.Parse(string(id))
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
+		return
+	}
+
+	db, err := ra.GetDB(r)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	userUUID, err := ra.GetUserUUID(r)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	uploadSvc, err := ra.newDatasetUploadService(r, db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	session, err := uploadSvc.CreateUpload(r.Context(), datasetUUID, userUUID)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"uploadId": session.UploadID,
+	})
 }
 
 // DeleteDatasetUploadByKey cancels a partially completed upload
 func (ra *RestApi) DeleteDatasetUploadByKey(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.DeleteDatasetUploadByKeyParams) {
-	w.WriteHeader(http.StatusNotImplemented)
+	datasetUUID, err := uuid.Parse(string(id))
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
+		return
+	}
+
+	db, err := ra.GetDB(r)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	uploadSvc, err := ra.newDatasetUploadService(r, db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	if err := uploadSvc.CancelUpload(r.Context(), datasetUUID, p.Key); err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ListDatasetPartsByKey lists all uploaded parts of the dataset
 func (ra *RestApi) ListDatasetPartsByKey(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.ListDatasetPartsByKeyParams) {
-	w.WriteHeader(http.StatusNotImplemented)
+	datasetUUID, err := uuid.Parse(string(id))
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
+		return
+	}
+
+	db, err := ra.GetDB(r)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	uploadSvc, err := ra.newDatasetUploadService(r, db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	parts, err := uploadSvc.ListParts(r.Context(), datasetUUID, p.Key)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]any{
+		"uploadId": p.Key,
+		"parts":    parts,
+	})
 }
 
 // AssembleDatasetPartsByKey combines all uploaded parts into a new dataset content
 func (ra *RestApi) AssembleDatasetPartsByKey(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.AssembleDatasetPartsByKeyParams) {
-	w.WriteHeader(http.StatusNotImplemented)
+	datasetUUID, err := uuid.Parse(string(id))
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
+		return
+	}
+
+	db, err := ra.GetDB(r)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	uploadSvc, err := ra.newDatasetUploadService(r, db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	if err := uploadSvc.AssembleUpload(r.Context(), datasetUUID, p.UploadId, p.ContentMD5); err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // UploadDatasetContentByKey uploads a (max 5MB) part of a new content update to a dataset
 func (ra *RestApi) UploadDatasetContentByKey(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.UploadDatasetContentByKeyParams) {
-	// Each part may no exceed 5 MB in size
-	r.Body = http.MaxBytesReader(w, r.Body, 5242880) // Max 5MB of data
-	w.WriteHeader(http.StatusNotImplemented)
+	datasetUUID, err := uuid.Parse(string(id))
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
+		return
+	}
+
+	db, err := ra.GetDB(r)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	uploadSvc, err := ra.newDatasetUploadService(r, db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	maxPartSize := viper.GetInt64("dataset_uploads.max_part_size")
+	if maxPartSize > 0 {
+		r.Body = http.MaxBytesReader(w, r.Body, maxPartSize)
+	}
+
+	if err := uploadSvc.UploadPart(r.Context(), datasetUUID, p.UploadId, p.PartNumber, p.ContentMD5, r.Body); err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "uploaded",
+	})
 }
 
 // DeleteDatasetByUuid deletes a dataset by its UUID
@@ -325,4 +458,23 @@ func (ra *RestApi) DeleteDatasetByUuid(w http.ResponseWriter, r *http.Request, i
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (ra *RestApi) newDatasetUploadService(r *http.Request, db *sql.DB) (*services.DatasetUploadService, error) {
+	domaintoken, err := ra.GetDomainToken(r)
+	if err != nil {
+		return nil, err
+	}
+
+	rootDir := viper.GetString("dataset_uploads.root_dir")
+	if rootDir == "" {
+		return nil, fmt.Errorf("dataset_uploads.root_dir is empty")
+	}
+
+	return services.NewDatasetUploadService(db, services.DatasetUploadOptions{
+		Domain:       domaintoken.Domain,
+		RootDir:      rootDir,
+		MaxPartSize:  viper.GetInt64("dataset_uploads.max_part_size"),
+		MaxTotalSize: viper.GetInt64("dataset_uploads.max_total_size"),
+	}), nil
 }

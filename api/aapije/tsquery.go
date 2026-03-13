@@ -10,17 +10,19 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/self-host/self-host/api/aapije/rest"
 	ie "github.com/self-host/self-host/internal/errors"
 	"github.com/self-host/self-host/internal/services"
 	"github.com/self-host/self-host/pkg/util"
+	"github.com/spf13/viper"
 )
 
 // FindTsdataByQuery query multiple time series for data
 func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p rest.FindTsdataByQueryParams) {
 	timezone := "UTC"
-	aggregate := "avg"
-	precision := "microseconds"
+	aggregate := ""
+	precision := ""
 
 	if time.Time(p.End).Sub(time.Time(p.Start)) > 31622401*time.Second {
 		// FIXME: these errors should be declared in one location
@@ -60,17 +62,12 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 		ie.SendHTTPError(w, ie.NewBadRequestError(fmt.Errorf("uuids has invalid format")))
 		return
 	}
+	uuids = uniqueUUIDs(uuids)
 
-	// Ensure all timeseries exists
-	for _, id := range uuids {
-		ok, err := svc.Exists(r.Context(), id)
-		if err != nil {
-			ie.SendHTTPError(w, ie.ParseDBError(err))
-			return
-		} else if ok == false {
-			ie.SendHTTPError(w, ie.ErrorNotFound)
-			return
-		}
+	maxSeries := viper.GetInt("timeseries_queries.max_series")
+	if maxSeries > 0 && len(uuids) > maxSeries {
+		ie.SendHTTPError(w, ie.NewBadRequestError(fmt.Errorf("requested %d timeseries, limit is %d", len(uuids), maxSeries)))
+		return
 	}
 
 	// Generate check rules for access control
@@ -91,14 +88,17 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 	}
 
 	params := services.QueryMultiSourceDataParams{
-		Uuids:       uuids,
-		Start:       time.Time(p.Start),
-		End:         time.Time(p.End),
-		GreaterOrEq: (*float32)(p.Ge),
-		LessOrEq:    (*float32)(p.Le),
-		Aggregate:   aggregate,
-		Precision:   precision,
-		Timezone:    timezone,
+		Uuids:              uuids,
+		Start:              time.Time(p.Start),
+		End:                time.Time(p.End),
+		GreaterOrEq:        (*float32)(p.Ge),
+		LessOrEq:           (*float32)(p.Le),
+		Aggregate:          aggregate,
+		Precision:          precision,
+		Timezone:           timezone,
+		UseRollups:         viper.GetBool("timeseries_rollups.enabled"),
+		MaxPointsPerSeries: viper.GetInt("timeseries_queries.max_points_per_series"),
+		MaxTotalPoints:     viper.GetInt("timeseries_queries.max_total_points"),
 	}
 
 	data, err := svc.QueryMultiSourceData(r.Context(), params)
@@ -107,7 +107,39 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 		return
 	}
 
+	if len(data) < uniqueUUIDCount(uuids) {
+		ok, err = svc.ExistAll(r.Context(), uuids)
+		if err != nil {
+			ie.SendHTTPError(w, ie.ParseDBError(err))
+			return
+		} else if ok == false {
+			ie.SendHTTPError(w, ie.ErrorNotFound)
+			return
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(data)
 	return
+}
+
+func uniqueUUIDs(ids []uuid.UUID) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	out := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+func uniqueUUIDCount(ids []uuid.UUID) int {
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	for _, id := range ids {
+		seen[id] = struct{}{}
+	}
+	return len(seen)
 }
