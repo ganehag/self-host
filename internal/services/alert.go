@@ -385,7 +385,9 @@ func (svc *AlertService) UpdateAlertByUuid(ctx context.Context, id uuid.UUID, p 
 		}
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 
 	return count, nil
 }

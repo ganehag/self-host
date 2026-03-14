@@ -52,7 +52,9 @@ func (u *GroupService) AddGroup(ctx context.Context, name string) (*rest.Group, 
 		return nil, err
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 
 	return &rest.Group{
 		Uuid: group.Uuid.String(),

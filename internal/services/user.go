@@ -65,7 +65,9 @@ func (u *UserService) AddUser(ctx context.Context, name string) (*rest.User, err
 		return nil, err
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 
 	ugs, err := u.q.FindGroupsByUser(ctx, user.Uuid)
 	if err != nil {
@@ -146,7 +148,9 @@ func (u *UserService) AddRemoveUserToGroups(ctx context.Context, userUUID uuid.U
 		}
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 
 	return count + addedCount, nil
 }
@@ -176,7 +180,9 @@ func (u *UserService) AddUserToGroups(ctx context.Context, userUUID uuid.UUID, g
 		}
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -328,7 +334,9 @@ func (u *UserService) SetUserGroups(ctx context.Context, userUUID uuid.UUID, gro
 		}
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 
 	return count + addedCount, nil
 }
@@ -406,7 +414,9 @@ func (u *UserService) UpdateUser(ctx context.Context, userUUID uuid.UUID, p Upda
 		}
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 
 	return count, nil
 }
