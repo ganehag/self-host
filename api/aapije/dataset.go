@@ -378,7 +378,7 @@ func (ra *RestApi) AssembleDatasetPartsByKey(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := uploadSvc.AssembleUpload(r.Context(), datasetUUID, p.UploadId, p.ContentMD5); err != nil {
+	if err := uploadSvc.AssembleUpload(r.Context(), datasetUUID, p.UploadId, nullableStringParam(p.ContentMD5)); err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
 		return
 	}
@@ -407,7 +407,7 @@ func (ra *RestApi) UploadDatasetContentByKey(w http.ResponseWriter, r *http.Requ
 		r.Body = http.MaxBytesReader(w, r.Body, maxPartSize)
 	}
 
-	if err := uploadSvc.UploadPart(r.Context(), datasetUUID, p.UploadId, p.PartNumber, p.ContentMD5, r.Body); err != nil {
+	if err := uploadSvc.UploadPart(r.Context(), datasetUUID, p.UploadId, p.PartNumber, nullableStringParam(p.ContentMD5), r.Body); err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
 		return
 	}

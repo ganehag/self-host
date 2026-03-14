@@ -85,6 +85,9 @@ func (svc *DatasetService) AddDataset(ctx context.Context, p *AddDatasetParams) 
 	}
 
 	content := p.Content
+	if content == nil {
+		content = []byte{}
+	}
 	checksum := checksumHex(content)
 	size := len(content)
 	storageBackend := DatasetStorageBackendInline
@@ -93,7 +96,7 @@ func (svc *DatasetService) AddDataset(ctx context.Context, p *AddDatasetParams) 
 	inlineContent := content
 
 	if svc.store != nil && len(content) > 0 {
-		ref := svc.opt.WriteRef(datasetUUID.String())
+		ref := svc.opt.ContentRef(datasetUUID.String())
 		meta, err := svc.store.PutObject(ctx, ref, content, p.Format)
 		if err != nil {
 			return nil, err
@@ -407,7 +410,7 @@ func (svc *DatasetService) UpdateDatasetByUuid(ctx context.Context, id uuid.UUID
 				format = current.Format
 			}
 
-			ref := svc.opt.WriteRef(id.String())
+			ref := svc.opt.ContentRef(id.String())
 			meta, err := svc.store.PutObject(ctx, ref, content, format)
 			if err != nil {
 				return 0, err

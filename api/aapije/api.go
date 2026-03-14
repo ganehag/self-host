@@ -88,3 +88,10 @@ func uuidSliceFromParams(ids []rest.UUID) []uuid.UUID {
 	}
 	return out
 }
+
+func nullableStringParam[T ~string](v *T) string {
+	if v == nil {
+		return ""
+	}
+	return string(*v)
+}

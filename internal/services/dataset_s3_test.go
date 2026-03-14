@@ -104,6 +104,9 @@ func TestDatasetS3ContentRoundTrip(t *testing.T) {
 	if !row.StorageBucket.Valid || !row.StorageKey.Valid {
 		t.Fatal("expected dataset object reference to be stored")
 	}
+	if want := s3srv.storageOptions().ContentRef(dsID.String()).Key; row.StorageKey.String != want {
+		t.Fatalf("expected dataset content key %q, got %q", want, row.StorageKey.String)
+	}
 
 	file, err := svc.GetDatasetContentByUuid(context.Background(), dsID)
 	if err != nil {
@@ -187,6 +190,17 @@ func TestDatasetS3MultipartAssemble(t *testing.T) {
 	want := []byte(part1 + part2)
 	if !bytes.Equal(got, want) {
 		t.Fatalf("assembled dataset mismatch: got %d bytes want %d", len(got), len(want))
+	}
+
+	row, err := dsSvc.q.GetDatasetObjectRefByUUID(context.Background(), dsID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wantKey := storageOpt.ContentRef(dsID.String()).Key; nullableSQLString(row.StorageKey) != wantKey {
+		t.Fatalf("expected assembled dataset content key %q, got %q", wantKey, nullableSQLString(row.StorageKey))
+	}
+	if int64(row.Size) != int64(len(want)) {
+		t.Fatalf("expected assembled dataset size %d, got %d", len(want), row.Size)
 	}
 }
 

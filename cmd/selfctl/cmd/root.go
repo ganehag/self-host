@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 	// "os"
 	"path"
+	"strings"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
@@ -69,6 +70,8 @@ func initConfig() {
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match
+	viper.SetEnvPrefix("selfctl")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	viper.ReadInConfig()
 }
