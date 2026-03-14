@@ -5,7 +5,6 @@
 package aapije
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -19,7 +18,7 @@ import (
 func (ra *RestApi) AddUser(w http.ResponseWriter, r *http.Request) {
 	// We expect a NewUser object in the request body.
 	var newUser rest.NewUser
-	if err := json.NewDecoder(r.Body).Decode(&newUser); err != nil {
+	if err := ra.decodeJSONBody(w, r, &newUser); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -39,21 +38,16 @@ func (ra *RestApi) AddUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(user)
+	writeJSON(w, http.StatusCreated, user)
 }
 
 // AddNewTokenToUser creates a new access token for a user
 func (ra *RestApi) AddNewTokenToUser(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	userUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	userUUID := uuidFromParam(id)
 
 	// We expect a NewUser object in the request body.
 	var newToken rest.NewToken
-	if err := json.NewDecoder(r.Body).Decode(&newToken); err != nil {
+	if err := ra.decodeJSONBody(w, r, &newToken); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -73,8 +67,7 @@ func (ra *RestApi) AddNewTokenToUser(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(user)
+	writeJSON(w, http.StatusCreated, user)
 }
 
 // Whoami returns the current user
@@ -98,8 +91,7 @@ func (ra *RestApi) Whoami(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(user)
+	writeJSON(w, http.StatusOK, user)
 }
 
 // FindUsers lists all users
@@ -123,17 +115,12 @@ func (ra *RestApi) FindUsers(w http.ResponseWriter, r *http.Request, p rest.Find
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(users)
+	writeJSON(w, http.StatusOK, users)
 }
 
 // FindUserByUuid returns a specific user by its UUID
 func (ra *RestApi) FindUserByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	userUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	userUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -148,17 +135,12 @@ func (ra *RestApi) FindUserByUuid(w http.ResponseWriter, r *http.Request, id res
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(user)
+	writeJSON(w, http.StatusOK, user)
 }
 
 // FindTokensForUser lists all access tokens for a user
 func (ra *RestApi) FindTokensForUser(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	userUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	userUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -174,17 +156,12 @@ func (ra *RestApi) FindTokensForUser(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(tokens)
+	writeJSON(w, http.StatusOK, tokens)
 }
 
 // FindPoliciesForUser lists all access policies assigned to a user via groups
 func (ra *RestApi) FindPoliciesForUser(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	userUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	userUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -200,17 +177,12 @@ func (ra *RestApi) FindPoliciesForUser(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(policies)
+	writeJSON(w, http.StatusOK, policies)
 }
 
 // UpdateUserByUuid updates a specific user by its UUID
 func (ra *RestApi) UpdateUserByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	userUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	userUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -222,7 +194,7 @@ func (ra *RestApi) UpdateUserByUuid(w http.ResponseWriter, r *http.Request, id r
 
 	// We expect a UpdateUser object in the request body.
 	var updUser rest.UpdateUser
-	if err := json.NewDecoder(r.Body).Decode(&updUser); err != nil {
+	if err := ra.decodeJSONBody(w, r, &updUser); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -293,11 +265,7 @@ func (ra *RestApi) SetRequestRateForUser(w http.ResponseWriter, r *http.Request,
 
 // DeleteUserByUuid deletes a specific user by its UUID
 func (ra *RestApi) DeleteUserByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	userUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	userUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -317,18 +285,9 @@ func (ra *RestApi) DeleteUserByUuid(w http.ResponseWriter, r *http.Request, id r
 }
 
 // DeleteTokenForUser deletes an access token for a user
-func (ra *RestApi) DeleteTokenForUser(w http.ResponseWriter, r *http.Request, id rest.UuidParam, tokenId string) {
-	userUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
-
-	tokenUUID, err := uuid.Parse(tokenId)
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+func (ra *RestApi) DeleteTokenForUser(w http.ResponseWriter, r *http.Request, id rest.UuidParam, tokenId rest.TokenUUIDParam) {
+	userUUID := uuidFromParam(id)
+	tokenUUID := uuid.UUID(tokenId)
 
 	db, err := ra.GetDB(r)
 	if err != nil {

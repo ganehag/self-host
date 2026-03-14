@@ -5,10 +5,8 @@
 package aapije
 
 import (
-	"encoding/json"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/self-host/self-host/api/aapije/rest"
 	ie "github.com/self-host/self-host/internal/errors"
 	"github.com/self-host/self-host/internal/services"
@@ -18,7 +16,7 @@ import (
 func (ra *RestApi) CreateAlert(w http.ResponseWriter, r *http.Request) {
 	// We expect a NewAlert object in the request body.
 	var n rest.NewAlert
-	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
+	if err := ra.decodeJSONBody(w, r, &n); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -77,8 +75,7 @@ func (ra *RestApi) CreateAlert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(alert)
+	writeJSON(w, http.StatusCreated, alert)
 }
 
 // FindAlerts lists alerts
@@ -133,17 +130,12 @@ func (ra *RestApi) FindAlerts(w http.ResponseWriter, r *http.Request, p rest.Fin
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(alerts)
+	writeJSON(w, http.StatusOK, alerts)
 }
 
 // FindAlertByUuid gets the content of a specific alert
 func (ra *RestApi) FindAlertByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	alertUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	alertUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -158,17 +150,12 @@ func (ra *RestApi) FindAlertByUuid(w http.ResponseWriter, r *http.Request, id re
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(alert)
+	writeJSON(w, http.StatusOK, alert)
 }
 
 // UpdateAlertByUuid update an alert with new content
 func (ra *RestApi) UpdateAlertByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	alertUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	alertUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -178,7 +165,7 @@ func (ra *RestApi) UpdateAlertByUuid(w http.ResponseWriter, r *http.Request, id 
 
 	// We expect a UpdateAlert object in the request body.
 	var updAlert rest.UpdateAlert
-	if err := json.NewDecoder(r.Body).Decode(&updAlert); err != nil {
+	if err := ra.decodeJSONBody(w, r, &updAlert); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -213,11 +200,7 @@ func (ra *RestApi) UpdateAlertByUuid(w http.ResponseWriter, r *http.Request, id 
 
 // DeleteAlertByUuid deletes an alert
 func (ra *RestApi) DeleteAlertByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	alertUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	alertUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {

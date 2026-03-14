@@ -5,11 +5,40 @@ package rest
 
 import (
 	"time"
+
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 const (
 	BasicAuthScopes = "BasicAuth.Scopes"
 )
+
+// Defines values for Aggregate.
+const (
+	Avg   Aggregate = "avg"
+	Count Aggregate = "count"
+	Max   Aggregate = "max"
+	Min   Aggregate = "min"
+	Sum   Aggregate = "sum"
+)
+
+// Valid indicates whether the value is a known member of the Aggregate enum.
+func (e Aggregate) Valid() bool {
+	switch e {
+	case Avg:
+		return true
+	case Count:
+		return true
+	case Max:
+		return true
+	case Min:
+		return true
+	case Sum:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for AlertSeverity.
 const (
@@ -197,6 +226,93 @@ func (e PolicyEffect) Valid() bool {
 	}
 }
 
+// Defines values for PolicyDecisionAction.
+const (
+	PolicyDecisionActionCreate PolicyDecisionAction = "create"
+	PolicyDecisionActionDelete PolicyDecisionAction = "delete"
+	PolicyDecisionActionRead   PolicyDecisionAction = "read"
+	PolicyDecisionActionUpdate PolicyDecisionAction = "update"
+)
+
+// Valid indicates whether the value is a known member of the PolicyDecisionAction enum.
+func (e PolicyDecisionAction) Valid() bool {
+	switch e {
+	case PolicyDecisionActionCreate:
+		return true
+	case PolicyDecisionActionDelete:
+		return true
+	case PolicyDecisionActionRead:
+		return true
+	case PolicyDecisionActionUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Precision.
+const (
+	Century      Precision = "century"
+	Day          Precision = "day"
+	Decade       Precision = "decade"
+	Hour         Precision = "hour"
+	Microseconds Precision = "microseconds"
+	Millennia    Precision = "millennia"
+	Milliseconds Precision = "milliseconds"
+	Minute       Precision = "minute"
+	Minute10     Precision = "minute10"
+	Minute15     Precision = "minute15"
+	Minute20     Precision = "minute20"
+	Minute30     Precision = "minute30"
+	Minute5      Precision = "minute5"
+	Month        Precision = "month"
+	Second       Precision = "second"
+	Week         Precision = "week"
+	Year         Precision = "year"
+)
+
+// Valid indicates whether the value is a known member of the Precision enum.
+func (e Precision) Valid() bool {
+	switch e {
+	case Century:
+		return true
+	case Day:
+		return true
+	case Decade:
+		return true
+	case Hour:
+		return true
+	case Microseconds:
+		return true
+	case Millennia:
+		return true
+	case Milliseconds:
+		return true
+	case Minute:
+		return true
+	case Minute10:
+		return true
+	case Minute15:
+		return true
+	case Minute20:
+		return true
+	case Minute30:
+		return true
+	case Minute5:
+		return true
+	case Month:
+		return true
+	case Second:
+		return true
+	case Week:
+		return true
+	case Year:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ProgramLanguage.
 const (
 	ProgramLanguageTengo ProgramLanguage = "tengo"
@@ -272,96 +388,6 @@ func (e ThingState) Valid() bool {
 	case ThingStateInactive:
 		return true
 	case ThingStatePassive:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AggregateParam.
-const (
-	AggregateParamAvg   AggregateParam = "avg"
-	AggregateParamCount AggregateParam = "count"
-	AggregateParamMax   AggregateParam = "max"
-	AggregateParamMin   AggregateParam = "min"
-	AggregateParamSum   AggregateParam = "sum"
-)
-
-// Valid indicates whether the value is a known member of the AggregateParam enum.
-func (e AggregateParam) Valid() bool {
-	switch e {
-	case AggregateParamAvg:
-		return true
-	case AggregateParamCount:
-		return true
-	case AggregateParamMax:
-		return true
-	case AggregateParamMin:
-		return true
-	case AggregateParamSum:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for PrecisionParam.
-const (
-	PrecisionParamCentury      PrecisionParam = "century"
-	PrecisionParamDay          PrecisionParam = "day"
-	PrecisionParamDecade       PrecisionParam = "decade"
-	PrecisionParamHour         PrecisionParam = "hour"
-	PrecisionParamMicroseconds PrecisionParam = "microseconds"
-	PrecisionParamMillennia    PrecisionParam = "millennia"
-	PrecisionParamMilliseconds PrecisionParam = "milliseconds"
-	PrecisionParamMinute       PrecisionParam = "minute"
-	PrecisionParamMinute10     PrecisionParam = "minute10"
-	PrecisionParamMinute15     PrecisionParam = "minute15"
-	PrecisionParamMinute20     PrecisionParam = "minute20"
-	PrecisionParamMinute30     PrecisionParam = "minute30"
-	PrecisionParamMinute5      PrecisionParam = "minute5"
-	PrecisionParamMonth        PrecisionParam = "month"
-	PrecisionParamSecond       PrecisionParam = "second"
-	PrecisionParamWeek         PrecisionParam = "week"
-	PrecisionParamYear         PrecisionParam = "year"
-)
-
-// Valid indicates whether the value is a known member of the PrecisionParam enum.
-func (e PrecisionParam) Valid() bool {
-	switch e {
-	case PrecisionParamCentury:
-		return true
-	case PrecisionParamDay:
-		return true
-	case PrecisionParamDecade:
-		return true
-	case PrecisionParamHour:
-		return true
-	case PrecisionParamMicroseconds:
-		return true
-	case PrecisionParamMillennia:
-		return true
-	case PrecisionParamMilliseconds:
-		return true
-	case PrecisionParamMinute:
-		return true
-	case PrecisionParamMinute10:
-		return true
-	case PrecisionParamMinute15:
-		return true
-	case PrecisionParamMinute20:
-		return true
-	case PrecisionParamMinute30:
-		return true
-	case PrecisionParamMinute5:
-		return true
-	case PrecisionParamMonth:
-		return true
-	case PrecisionParamSecond:
-		return true
-	case PrecisionParamWeek:
-		return true
-	case PrecisionParamYear:
 		return true
 	default:
 		return false
@@ -764,30 +790,6 @@ func (e AddPolicyJSONBodyEffect) Valid() bool {
 	}
 }
 
-// Defines values for ExplainPolicyDecisionParamsAction.
-const (
-	ExplainPolicyDecisionParamsActionCreate ExplainPolicyDecisionParamsAction = "create"
-	ExplainPolicyDecisionParamsActionDelete ExplainPolicyDecisionParamsAction = "delete"
-	ExplainPolicyDecisionParamsActionRead   ExplainPolicyDecisionParamsAction = "read"
-	ExplainPolicyDecisionParamsActionUpdate ExplainPolicyDecisionParamsAction = "update"
-)
-
-// Valid indicates whether the value is a known member of the ExplainPolicyDecisionParamsAction enum.
-func (e ExplainPolicyDecisionParamsAction) Valid() bool {
-	switch e {
-	case ExplainPolicyDecisionParamsActionCreate:
-		return true
-	case ExplainPolicyDecisionParamsActionDelete:
-		return true
-	case ExplainPolicyDecisionParamsActionRead:
-		return true
-	case ExplainPolicyDecisionParamsActionUpdate:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for UpdatePolicyByUuidJSONBodyAction.
 const (
 	Create UpdatePolicyByUuidJSONBodyAction = "create"
@@ -968,185 +970,8 @@ func (e UpdateThingByUuidJSONBodyState) Valid() bool {
 	}
 }
 
-// Defines values for QueryTimeseriesForDataParamsPrecision.
-const (
-	QueryTimeseriesForDataParamsPrecisionCentury      QueryTimeseriesForDataParamsPrecision = "century"
-	QueryTimeseriesForDataParamsPrecisionDay          QueryTimeseriesForDataParamsPrecision = "day"
-	QueryTimeseriesForDataParamsPrecisionDecade       QueryTimeseriesForDataParamsPrecision = "decade"
-	QueryTimeseriesForDataParamsPrecisionHour         QueryTimeseriesForDataParamsPrecision = "hour"
-	QueryTimeseriesForDataParamsPrecisionMicroseconds QueryTimeseriesForDataParamsPrecision = "microseconds"
-	QueryTimeseriesForDataParamsPrecisionMillennia    QueryTimeseriesForDataParamsPrecision = "millennia"
-	QueryTimeseriesForDataParamsPrecisionMilliseconds QueryTimeseriesForDataParamsPrecision = "milliseconds"
-	QueryTimeseriesForDataParamsPrecisionMinute       QueryTimeseriesForDataParamsPrecision = "minute"
-	QueryTimeseriesForDataParamsPrecisionMinute10     QueryTimeseriesForDataParamsPrecision = "minute10"
-	QueryTimeseriesForDataParamsPrecisionMinute15     QueryTimeseriesForDataParamsPrecision = "minute15"
-	QueryTimeseriesForDataParamsPrecisionMinute20     QueryTimeseriesForDataParamsPrecision = "minute20"
-	QueryTimeseriesForDataParamsPrecisionMinute30     QueryTimeseriesForDataParamsPrecision = "minute30"
-	QueryTimeseriesForDataParamsPrecisionMinute5      QueryTimeseriesForDataParamsPrecision = "minute5"
-	QueryTimeseriesForDataParamsPrecisionMonth        QueryTimeseriesForDataParamsPrecision = "month"
-	QueryTimeseriesForDataParamsPrecisionSecond       QueryTimeseriesForDataParamsPrecision = "second"
-	QueryTimeseriesForDataParamsPrecisionWeek         QueryTimeseriesForDataParamsPrecision = "week"
-	QueryTimeseriesForDataParamsPrecisionYear         QueryTimeseriesForDataParamsPrecision = "year"
-)
-
-// Valid indicates whether the value is a known member of the QueryTimeseriesForDataParamsPrecision enum.
-func (e QueryTimeseriesForDataParamsPrecision) Valid() bool {
-	switch e {
-	case QueryTimeseriesForDataParamsPrecisionCentury:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionDay:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionDecade:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionHour:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionMicroseconds:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionMillennia:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionMilliseconds:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionMinute:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionMinute10:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionMinute15:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionMinute20:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionMinute30:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionMinute5:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionMonth:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionSecond:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionWeek:
-		return true
-	case QueryTimeseriesForDataParamsPrecisionYear:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for QueryTimeseriesForDataParamsAggregate.
-const (
-	QueryTimeseriesForDataParamsAggregateAvg   QueryTimeseriesForDataParamsAggregate = "avg"
-	QueryTimeseriesForDataParamsAggregateCount QueryTimeseriesForDataParamsAggregate = "count"
-	QueryTimeseriesForDataParamsAggregateMax   QueryTimeseriesForDataParamsAggregate = "max"
-	QueryTimeseriesForDataParamsAggregateMin   QueryTimeseriesForDataParamsAggregate = "min"
-	QueryTimeseriesForDataParamsAggregateSum   QueryTimeseriesForDataParamsAggregate = "sum"
-)
-
-// Valid indicates whether the value is a known member of the QueryTimeseriesForDataParamsAggregate enum.
-func (e QueryTimeseriesForDataParamsAggregate) Valid() bool {
-	switch e {
-	case QueryTimeseriesForDataParamsAggregateAvg:
-		return true
-	case QueryTimeseriesForDataParamsAggregateCount:
-		return true
-	case QueryTimeseriesForDataParamsAggregateMax:
-		return true
-	case QueryTimeseriesForDataParamsAggregateMin:
-		return true
-	case QueryTimeseriesForDataParamsAggregateSum:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for FindTsdataByQueryParamsPrecision.
-const (
-	Century      FindTsdataByQueryParamsPrecision = "century"
-	Day          FindTsdataByQueryParamsPrecision = "day"
-	Decade       FindTsdataByQueryParamsPrecision = "decade"
-	Hour         FindTsdataByQueryParamsPrecision = "hour"
-	Microseconds FindTsdataByQueryParamsPrecision = "microseconds"
-	Millennia    FindTsdataByQueryParamsPrecision = "millennia"
-	Milliseconds FindTsdataByQueryParamsPrecision = "milliseconds"
-	Minute       FindTsdataByQueryParamsPrecision = "minute"
-	Minute10     FindTsdataByQueryParamsPrecision = "minute10"
-	Minute15     FindTsdataByQueryParamsPrecision = "minute15"
-	Minute20     FindTsdataByQueryParamsPrecision = "minute20"
-	Minute30     FindTsdataByQueryParamsPrecision = "minute30"
-	Minute5      FindTsdataByQueryParamsPrecision = "minute5"
-	Month        FindTsdataByQueryParamsPrecision = "month"
-	Second       FindTsdataByQueryParamsPrecision = "second"
-	Week         FindTsdataByQueryParamsPrecision = "week"
-	Year         FindTsdataByQueryParamsPrecision = "year"
-)
-
-// Valid indicates whether the value is a known member of the FindTsdataByQueryParamsPrecision enum.
-func (e FindTsdataByQueryParamsPrecision) Valid() bool {
-	switch e {
-	case Century:
-		return true
-	case Day:
-		return true
-	case Decade:
-		return true
-	case Hour:
-		return true
-	case Microseconds:
-		return true
-	case Millennia:
-		return true
-	case Milliseconds:
-		return true
-	case Minute:
-		return true
-	case Minute10:
-		return true
-	case Minute15:
-		return true
-	case Minute20:
-		return true
-	case Minute30:
-		return true
-	case Minute5:
-		return true
-	case Month:
-		return true
-	case Second:
-		return true
-	case Week:
-		return true
-	case Year:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for FindTsdataByQueryParamsAggregate.
-const (
-	Avg   FindTsdataByQueryParamsAggregate = "avg"
-	Count FindTsdataByQueryParamsAggregate = "count"
-	Max   FindTsdataByQueryParamsAggregate = "max"
-	Min   FindTsdataByQueryParamsAggregate = "min"
-	Sum   FindTsdataByQueryParamsAggregate = "sum"
-)
-
-// Valid indicates whether the value is a known member of the FindTsdataByQueryParamsAggregate enum.
-func (e FindTsdataByQueryParamsAggregate) Valid() bool {
-	switch e {
-	case Avg:
-		return true
-	case Count:
-		return true
-	case Max:
-		return true
-	case Min:
-		return true
-	case Sum:
-		return true
-	default:
-		return false
-	}
-}
+// Aggregate defines model for Aggregate.
+type Aggregate string
 
 // Alert defines model for Alert.
 type Alert struct {
@@ -1246,6 +1071,9 @@ type Dataset struct {
 // DatasetFormat File format of the data set.
 type DatasetFormat string
 
+// DatasetList defines model for DatasetList.
+type DatasetList = []Dataset
+
 // DatasetUploadPart Metadata for one uploaded dataset part.
 type DatasetUploadPart struct {
 	ChecksumMD5 string    `json:"checksumMD5"`
@@ -1260,8 +1088,22 @@ type DatasetUploadParts struct {
 	UploadId string              `json:"uploadId"`
 }
 
+// DateTime defines model for DateTime.
+type DateTime = time.Time
+
+// ETag defines model for ETag.
+type ETag = string
+
+// ErrorMessage defines model for ErrorMessage.
+type ErrorMessage struct {
+	Message string `json:"message"`
+}
+
 // ErrorText Plain-text error response body.
 type ErrorText = string
+
+// FreeformString defines model for FreeformString.
+type FreeformString = string
 
 // Group Authorization group used to collect policies and assign them to users.
 type Group struct {
@@ -1269,10 +1111,28 @@ type Group struct {
 	Uuid string `json:"uuid"`
 }
 
+// Limit defines model for Limit.
+type Limit = int64
+
+// MD5Hex defines model for MD5Hex.
+type MD5Hex = string
+
 // NewAlertReply The model returned when an Alert was created.
 type NewAlertReply struct {
 	Uuid string `json:"uuid"`
 }
+
+// NonEmptyString defines model for NonEmptyString.
+type NonEmptyString = string
+
+// NumericValue defines model for NumericValue.
+type NumericValue = float32
+
+// Offset defines model for Offset.
+type Offset = int64
+
+// PartNumber defines model for PartNumber.
+type PartNumber = int
 
 // Policy Access control policy that applies an effect to an action/resource pair.
 type Policy struct {
@@ -1293,6 +1153,12 @@ type PolicyAction string
 
 // PolicyEffect defines model for Policy.Effect.
 type PolicyEffect string
+
+// PolicyDecisionAction defines model for PolicyDecisionAction.
+type PolicyDecisionAction string
+
+// Precision defines model for Precision.
+type Precision string
 
 // Program Program metadata for modules, routines, and webhooks.
 type Program struct {
@@ -1322,6 +1188,18 @@ type ProgramState string
 // ProgramType Routines are executed at an interval. Webhooks are called using the REST API. Modules are used by Routines and Webhooks to extend their functionality.
 type ProgramType string
 
+// RevisionID defines model for RevisionID.
+type RevisionID = int
+
+// RevisionNumber defines model for RevisionNumber.
+type RevisionNumber = int
+
+// SiUnit defines model for SiUnit.
+type SiUnit = string
+
+// StringFilterList defines model for StringFilterList.
+type StringFilterList = []string
+
 // Thing Thing metadata used to group datasets and time series around a logical object.
 type Thing struct {
 	// CreatedBy Reference to a User
@@ -1348,6 +1226,9 @@ type Timeseries struct {
 	Uuid       string   `json:"uuid"`
 }
 
+// Timezone defines model for Timezone.
+type Timezone = string
+
 // Token Token metadata without the secret value.
 type Token struct {
 	Created time.Time `json:"created"`
@@ -1370,6 +1251,9 @@ type TsResults struct {
 	Uuid string `json:"uuid"`
 }
 
+// TsResultsList defines model for TsResultsList.
+type TsResultsList = []TsResults
+
 // TsRow One time series sample point.
 type TsRow struct {
 	// Ts Date-time when created, as defined by RFC 3339, section 5.6.
@@ -1379,9 +1263,26 @@ type TsRow struct {
 	V float32 `json:"v"`
 }
 
+// TsRowList defines model for TsRowList.
+type TsRowList = []TsRow
+
+// UUID defines model for UUID.
+type UUID = openapi_types.UUID
+
+// UUIDList defines model for UUIDList.
+type UUIDList = []UUID
+
+// UploadId defines model for UploadId.
+type UploadId = string
+
 // UploadResult Confirmation payload for successful part upload.
 type UploadResult struct {
 	Message string `json:"message"`
+}
+
+// UploadSession defines model for UploadSession.
+type UploadSession struct {
+	UploadId UploadId `json:"uploadId"`
 }
 
 // User User account visible within a domain.
@@ -1392,47 +1293,71 @@ type User struct {
 	Uuid   string  `json:"uuid"`
 }
 
+// ActionParam defines model for actionParam.
+type ActionParam = PolicyDecisionAction
+
 // AggregateParam defines model for aggregateParam.
-type AggregateParam string
+type AggregateParam = Aggregate
+
+// ContentMD5HeaderParam defines model for contentMD5HeaderParam.
+type ContentMD5HeaderParam = MD5Hex
 
 // EnvFilterParam defines model for envFilterParam.
-type EnvFilterParam = string
+type EnvFilterParam = FreeformString
 
 // EventFilterParam defines model for eventFilterParam.
-type EventFilterParam = string
+type EventFilterParam = FreeformString
 
 // GreaterOrEqParam defines model for greaterOrEqParam.
-type GreaterOrEqParam = float32
+type GreaterOrEqParam = NumericValue
+
+// GroupUUIDsFilterParam defines model for groupUUIDsFilterParam.
+type GroupUUIDsFilterParam = UUIDList
 
 // IfNoneMatchParam defines model for ifNoneMatchParam.
-type IfNoneMatchParam = string
+type IfNoneMatchParam = ETag
 
 // LessOrEqParam defines model for lessOrEqParam.
-type LessOrEqParam = float32
+type LessOrEqParam = NumericValue
 
 // LimitParam defines model for limitParam.
-type LimitParam = int64
+type LimitParam = Limit
 
 // OffsetParam defines model for offsetParam.
-type OffsetParam = int64
+type OffsetParam = Offset
 
 // OriginFilterParam defines model for originFilterParam.
-type OriginFilterParam = string
+type OriginFilterParam = FreeformString
+
+// PartNumberParam defines model for partNumberParam.
+type PartNumberParam = PartNumber
 
 // PrecisionParam defines model for precisionParam.
-type PrecisionParam string
+type PrecisionParam = Precision
 
 // RangeEndParam defines model for rangeEndParam.
-type RangeEndParam = time.Time
+type RangeEndParam = DateTime
 
 // RangeStartParam defines model for rangeStartParam.
-type RangeStartParam = time.Time
+type RangeStartParam = DateTime
 
 // ResourceFilterParam defines model for resourceFilterParam.
-type ResourceFilterParam = string
+type ResourceFilterParam = FreeformString
+
+// ResourcePathParam defines model for resourcePathParam.
+type ResourcePathParam = NonEmptyString
+
+// RevisionAParam defines model for revisionAParam.
+type RevisionAParam = RevisionNumber
+
+// RevisionBParam defines model for revisionBParam.
+type RevisionBParam = RevisionNumber
+
+// RevisionIdParam defines model for revisionIdParam.
+type RevisionIdParam = RevisionID
 
 // ServiceFilterParam defines model for serviceFilterParam.
-type ServiceFilterParam = []string
+type ServiceFilterParam = StringFilterList
 
 // SeverityFilterParam defines model for severityFilterParam.
 type SeverityFilterParam = AlertSeverity
@@ -1444,19 +1369,28 @@ type SeverityGeFilterParam = AlertSeverity
 type SeverityLeFilterParam = AlertSeverity
 
 // SiUnitParam defines model for siUnitParam.
-type SiUnitParam = string
+type SiUnitParam = SiUnit
 
 // StatusFilterParam defines model for statusFilterParam.
 type StatusFilterParam = AlertStatus
 
 // TagsFilterParam defines model for tagsFilterParam.
-type TagsFilterParam = []string
+type TagsFilterParam = StringFilterList
 
 // TimezoneParam defines model for timezoneParam.
-type TimezoneParam = string
+type TimezoneParam = Timezone
+
+// TokenUUIDParam defines model for tokenUUIDParam.
+type TokenUUIDParam = UUID
+
+// UploadIdParam defines model for uploadIdParam.
+type UploadIdParam = UploadId
 
 // UuidParam defines model for uuidParam.
-type UuidParam = string
+type UuidParam = UUID
+
+// UuidsParam defines model for uuidsParam.
+type UuidsParam = UUIDList
 
 // NewAlert defines model for NewAlert.
 type NewAlert struct {
@@ -1850,20 +1784,29 @@ type UpdateDatasetByUuidJSONBodyFormat string
 
 // AssembleDatasetPartsByKeyParams defines parameters for AssembleDatasetPartsByKey.
 type AssembleDatasetPartsByKeyParams struct {
-	UploadId   string `form:"uploadId" json:"uploadId"`
-	ContentMD5 string `json:"Content-MD5"`
+	// UploadId Active multipart upload session identifier.
+	UploadId UploadIdParam `form:"uploadId" json:"uploadId"`
+
+	// ContentMD5 MD5 checksum of the payload or assembled object, represented as a 32-character hex string.
+	ContentMD5 ContentMD5HeaderParam `json:"Content-MD5"`
 }
 
 // ListDatasetPartsByKeyParams defines parameters for ListDatasetPartsByKey.
 type ListDatasetPartsByKeyParams struct {
-	UploadId string `form:"uploadId" json:"uploadId"`
+	// UploadId Active multipart upload session identifier.
+	UploadId UploadIdParam `form:"uploadId" json:"uploadId"`
 }
 
 // UploadDatasetContentByKeyParams defines parameters for UploadDatasetContentByKey.
 type UploadDatasetContentByKeyParams struct {
-	PartNumber int    `form:"partNumber" json:"partNumber"`
-	UploadId   string `form:"uploadId" json:"uploadId"`
-	ContentMD5 string `json:"Content-MD5"`
+	// PartNumber Multipart upload part number, starting at 1.
+	PartNumber PartNumberParam `form:"partNumber" json:"partNumber"`
+
+	// UploadId Active multipart upload session identifier.
+	UploadId UploadIdParam `form:"uploadId" json:"uploadId"`
+
+	// ContentMD5 MD5 checksum of the payload or assembled object, represented as a 32-character hex string.
+	ContentMD5 ContentMD5HeaderParam `json:"Content-MD5"`
 }
 
 // GetRawDatasetByUuidParams defines parameters for GetRawDatasetByUuid.
@@ -1878,7 +1821,8 @@ type GetRawDatasetByUuidParams struct {
 
 // DeleteDatasetUploadByKeyParams defines parameters for DeleteDatasetUploadByKey.
 type DeleteDatasetUploadByKeyParams struct {
-	UploadId string `form:"uploadId" json:"uploadId"`
+	// UploadId Active multipart upload session identifier.
+	UploadId UploadIdParam `form:"uploadId" json:"uploadId"`
 }
 
 // FindGroupsParams defines parameters for FindGroups.
@@ -1909,8 +1853,8 @@ type FindPoliciesParams struct {
 	// Limit The numbers of items to return.
 	Limit *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
 
-	// GroupUuids Group(s) to filter on
-	GroupUuids *[]string `form:"group_uuids,omitempty" json:"group_uuids,omitempty"`
+	// GroupUuids Group UUIDs to filter on.
+	GroupUuids *GroupUUIDsFilterParam `form:"group_uuids,omitempty" json:"group_uuids,omitempty"`
 }
 
 // AddPolicyJSONBody defines parameters for AddPolicy.
@@ -1935,14 +1879,11 @@ type AddPolicyJSONBodyEffect string
 // ExplainPolicyDecisionParams defines parameters for ExplainPolicyDecision.
 type ExplainPolicyDecisionParams struct {
 	// Action Action to evaluate.
-	Action ExplainPolicyDecisionParamsAction `form:"action" json:"action"`
+	Action ActionParam `form:"action" json:"action"`
 
 	// Resource Canonical resource path to evaluate, for example `timeseries/123/data`.
-	Resource string `form:"resource" json:"resource"`
+	Resource ResourcePathParam `form:"resource" json:"resource"`
 }
-
-// ExplainPolicyDecisionParamsAction defines parameters for ExplainPolicyDecision.
-type ExplainPolicyDecisionParamsAction string
 
 // UpdatePolicyByUuidJSONBody defines parameters for UpdatePolicyByUuid.
 type UpdatePolicyByUuidJSONBody struct {
@@ -2027,11 +1968,11 @@ type UpdateProgramByUuidJSONBodyType string
 
 // GetProgramCodeRevisionsDiffParams defines parameters for GetProgramCodeRevisionsDiff.
 type GetProgramCodeRevisionsDiffParams struct {
-	// RevA Revision A
-	RevA int `form:"rev_a" json:"rev_a"`
+	// RevA Revision A.
+	RevA RevisionAParam `form:"rev_a" json:"rev_a"`
 
-	// RevB Revision B
-	RevB int `form:"rev_b" json:"rev_b"`
+	// RevB Revision B.
+	RevB RevisionBParam `form:"rev_b" json:"rev_b"`
 }
 
 // FindThingsParams defines parameters for FindThings.
@@ -2148,7 +2089,7 @@ type QueryTimeseriesForDataParams struct {
 	// End End (<=) of time period. The period (start to end) can **not** exceed 1 year.
 	End RangeEndParam `form:"end" json:"end"`
 
-	// Unit The SI unit of the result. A cast will occur if the base unit differes.
+	// Unit The SI unit of the result. A cast will occur if the base unit differs.
 	Unit *SiUnitParam `form:"unit,omitempty" json:"unit,omitempty"`
 
 	// Ge Value should be greater or equal to (>=) this.
@@ -2158,34 +2099,28 @@ type QueryTimeseriesForDataParams struct {
 	Le *LessOrEqParam `form:"le,omitempty" json:"le,omitempty"`
 
 	// Precision Truncate all timestamps and perform aggregate operations on the grouping.
-	Precision *QueryTimeseriesForDataParamsPrecision `form:"precision,omitempty" json:"precision,omitempty"`
+	Precision *PrecisionParam `form:"precision,omitempty" json:"precision,omitempty"`
 
 	// Aggregate When using `precision`. Select this aggregate function instead of the default `avg` when computing the result. Does nothing when `precision` is not set.
-	Aggregate *QueryTimeseriesForDataParamsAggregate `form:"aggregate,omitempty" json:"aggregate,omitempty"`
+	Aggregate *AggregateParam `form:"aggregate,omitempty" json:"aggregate,omitempty"`
 
 	// Timezone Act as this time zone when grouping or formatting timestamps. Defaults to `UTC`.
 	Timezone *TimezoneParam `form:"timezone,omitempty" json:"timezone,omitempty"`
 }
-
-// QueryTimeseriesForDataParamsPrecision defines parameters for QueryTimeseriesForData.
-type QueryTimeseriesForDataParamsPrecision string
-
-// QueryTimeseriesForDataParamsAggregate defines parameters for QueryTimeseriesForData.
-type QueryTimeseriesForDataParamsAggregate string
 
 // AddDataToTimeseriesJSONBody defines parameters for AddDataToTimeseries.
 type AddDataToTimeseriesJSONBody = []TsRow
 
 // AddDataToTimeseriesParams defines parameters for AddDataToTimeseries.
 type AddDataToTimeseriesParams struct {
-	// Unit The SI unit of the result. A cast will occur if the base unit differes.
+	// Unit The SI unit of the result. A cast will occur if the base unit differs.
 	Unit *SiUnitParam `form:"unit,omitempty" json:"unit,omitempty"`
 }
 
 // FindTsdataByQueryParams defines parameters for FindTsdataByQuery.
 type FindTsdataByQueryParams struct {
 	// Uuids A series of timeseries UUIDs to search for
-	Uuids []string `form:"uuids" json:"uuids"`
+	Uuids UuidsParam `form:"uuids" json:"uuids"`
 
 	// Start Start (>=) of time period. The period (start to end) can **not** exceed 1 year.
 	Start RangeStartParam `form:"start" json:"start"`
@@ -2200,20 +2135,14 @@ type FindTsdataByQueryParams struct {
 	Le *LessOrEqParam `form:"le,omitempty" json:"le,omitempty"`
 
 	// Precision Truncate all timestamps and perform aggregate operations on the grouping.
-	Precision *FindTsdataByQueryParamsPrecision `form:"precision,omitempty" json:"precision,omitempty"`
+	Precision *PrecisionParam `form:"precision,omitempty" json:"precision,omitempty"`
 
 	// Aggregate When using `precision`. Select this aggregate function instead of the default `avg` when computing the result. Does nothing when `precision` is not set.
-	Aggregate *FindTsdataByQueryParamsAggregate `form:"aggregate,omitempty" json:"aggregate,omitempty"`
+	Aggregate *AggregateParam `form:"aggregate,omitempty" json:"aggregate,omitempty"`
 
 	// Timezone Act as this time zone when grouping or formatting timestamps. Defaults to `UTC`.
 	Timezone *TimezoneParam `form:"timezone,omitempty" json:"timezone,omitempty"`
 }
-
-// FindTsdataByQueryParamsPrecision defines parameters for FindTsdataByQuery.
-type FindTsdataByQueryParamsPrecision string
-
-// FindTsdataByQueryParamsAggregate defines parameters for FindTsdataByQuery.
-type FindTsdataByQueryParamsAggregate string
 
 // FindUsersParams defines parameters for FindUsers.
 type FindUsersParams struct {

@@ -5,10 +5,7 @@
 package aapije
 
 import (
-	"encoding/json"
 	"net/http"
-
-	"github.com/google/uuid"
 
 	"github.com/self-host/self-host/api/aapije/rest"
 	ie "github.com/self-host/self-host/internal/errors"
@@ -19,7 +16,7 @@ import (
 func (ra *RestApi) AddGroup(w http.ResponseWriter, r *http.Request) {
 	// We expect a NewGroup object in the request body.
 	var n rest.NewGroup
-	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
+	if err := ra.decodeJSONBody(w, r, &n); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -39,8 +36,7 @@ func (ra *RestApi) AddGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(group)
+	writeJSON(w, http.StatusCreated, group)
 }
 
 // FindGroups lists all groups
@@ -64,17 +60,12 @@ func (ra *RestApi) FindGroups(w http.ResponseWriter, r *http.Request, p rest.Fin
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(groups)
+	writeJSON(w, http.StatusOK, groups)
 }
 
 // FindGroupByUuid returns a specific group by its UUID
 func (ra *RestApi) FindGroupByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	groupUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	groupUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -89,17 +80,12 @@ func (ra *RestApi) FindGroupByUuid(w http.ResponseWriter, r *http.Request, id re
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(group)
+	writeJSON(w, http.StatusOK, group)
 }
 
 // FindPoliciesForGroup lists all policies beloning to a specific group
 func (ra *RestApi) FindPoliciesForGroup(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	groupUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	groupUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -115,21 +101,16 @@ func (ra *RestApi) FindPoliciesForGroup(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(policies)
+	writeJSON(w, http.StatusOK, policies)
 }
 
 // UpdateGroupByUuid updates a specific group by its UUID
 func (ra *RestApi) UpdateGroupByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	groupUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	groupUUID := uuidFromParam(id)
 
 	// We expect a UpdateUser object in the request body.
 	var obj rest.UpdateGroup
-	if err := json.NewDecoder(r.Body).Decode(&obj); err != nil {
+	if err := ra.decodeJSONBody(w, r, &obj); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -157,11 +138,7 @@ func (ra *RestApi) UpdateGroupByUuid(w http.ResponseWriter, r *http.Request, id 
 
 // DeleteGroupByUuid deletes a specific group by its UUID
 func (ra *RestApi) DeleteGroupByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	groupUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	groupUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {

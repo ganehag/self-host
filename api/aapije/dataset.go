@@ -7,7 +7,6 @@ package aapije
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"io"
 	"net/http"
 
@@ -22,7 +21,7 @@ import (
 func (ra *RestApi) AddDatasets(w http.ResponseWriter, r *http.Request) {
 	// We expect a NewDataset object in the request body.
 	var n rest.NewDataset
-	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
+	if err := ra.decodeJSONBody(w, r, &n); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -74,8 +73,7 @@ func (ra *RestApi) AddDatasets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(dataset)
+	writeJSON(w, http.StatusCreated, dataset)
 }
 
 // FindDatasets lists all datasets
@@ -134,17 +132,12 @@ func (ra *RestApi) FindDatasets(w http.ResponseWriter, r *http.Request, p rest.F
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(datasets)
+	writeJSON(w, http.StatusOK, datasets)
 }
 
 // FindDatasetByUuid returns a specific dataset by its UUID
 func (ra *RestApi) FindDatasetByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	datasetUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	datasetUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -163,17 +156,12 @@ func (ra *RestApi) FindDatasetByUuid(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(datasets)
+	writeJSON(w, http.StatusOK, datasets)
 }
 
 // UpdateDatasetByUuid updates a dataset by its UUID
 func (ra *RestApi) UpdateDatasetByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	datasetUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	datasetUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -181,12 +169,9 @@ func (ra *RestApi) UpdateDatasetByUuid(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	// Allow max of 1 MB read from body
-	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
-
 	// We expect a UpdateDataset object in the request body.
 	var updDataset rest.UpdateDataset
-	if err := json.NewDecoder(r.Body).Decode(&updDataset); err != nil {
+	if err := ra.decodeJSONBody(w, r, &updDataset); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -227,11 +212,7 @@ func (ra *RestApi) UpdateDatasetByUuid(w http.ResponseWriter, r *http.Request, i
 
 // GetRawDatasetByUuid gets the "file" content from a dataset by its UUID
 func (ra *RestApi) GetRawDatasetByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.GetRawDatasetByUuidParams) {
-	datasetUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	datasetUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -298,11 +279,7 @@ func (ra *RestApi) GetRawDatasetByUuid(w http.ResponseWriter, r *http.Request, i
 
 // InitializeDatasetUploadByUuid initiates the upload of a larger dataset
 func (ra *RestApi) InitializeDatasetUploadByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	datasetUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	datasetUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -328,19 +305,14 @@ func (ra *RestApi) InitializeDatasetUploadByUuid(w http.ResponseWriter, r *http.
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
+	writeJSON(w, http.StatusOK, map[string]string{
 		"uploadId": session.UploadID,
 	})
 }
 
 // DeleteDatasetUploadByKey cancels a partially completed upload
 func (ra *RestApi) DeleteDatasetUploadByKey(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.DeleteDatasetUploadByKeyParams) {
-	datasetUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	datasetUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -364,11 +336,7 @@ func (ra *RestApi) DeleteDatasetUploadByKey(w http.ResponseWriter, r *http.Reque
 
 // ListDatasetPartsByKey lists all uploaded parts of the dataset
 func (ra *RestApi) ListDatasetPartsByKey(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.ListDatasetPartsByKeyParams) {
-	datasetUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	datasetUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -388,8 +356,7 @@ func (ra *RestApi) ListDatasetPartsByKey(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"uploadId": p.UploadId,
 		"parts":    parts,
 	})
@@ -397,11 +364,7 @@ func (ra *RestApi) ListDatasetPartsByKey(w http.ResponseWriter, r *http.Request,
 
 // AssembleDatasetPartsByKey combines all uploaded parts into a new dataset content
 func (ra *RestApi) AssembleDatasetPartsByKey(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.AssembleDatasetPartsByKeyParams) {
-	datasetUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	datasetUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -425,11 +388,7 @@ func (ra *RestApi) AssembleDatasetPartsByKey(w http.ResponseWriter, r *http.Requ
 
 // UploadDatasetContentByKey uploads a (max 5MB) part of a new content update to a dataset
 func (ra *RestApi) UploadDatasetContentByKey(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.UploadDatasetContentByKeyParams) {
-	datasetUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	datasetUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -453,19 +412,14 @@ func (ra *RestApi) UploadDatasetContentByKey(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
+	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "uploaded",
 	})
 }
 
 // DeleteDatasetByUuid deletes a dataset by its UUID
 func (ra *RestApi) DeleteDatasetByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	datasetUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	datasetUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
