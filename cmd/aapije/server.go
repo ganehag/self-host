@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"io/fs"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
 	chiware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -143,17 +145,77 @@ func Server(address string) (<-chan error, error) {
 		MaxAge:           viper.GetInt("cors.max_age"),
 	}))
 
+	swaggerUIFS, err := fs.Sub(content, "static/swagger-ui")
+	if err != nil {
+		return nil, err
+	}
+	r.Get("/reference", func(w http.ResponseWriter, r *http.Request) {
+		index, err := fs.ReadFile(swaggerUIFS, "index.html")
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write(index)
+	})
+	r.Get("/reference/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/reference", http.StatusPermanentRedirect)
+	})
+	r.Handle("/reference/*", http.StripPrefix("/reference/", http.FileServer(http.FS(swaggerUIFS))))
+	r.Get("/static/swagger-ui", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/reference", http.StatusPermanentRedirect)
+	})
+	r.Get("/static/swagger-ui/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/reference", http.StatusPermanentRedirect)
+	})
+	r.Handle("/static/swagger-ui/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/reference", http.StatusPermanentRedirect)
+	}))
 	fsys, err := fs.Sub(content, "static")
+	if err != nil {
+		return nil, err
+	}
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(fsys)))) /**/
 
 	r.Get("/openapi3.json", func(w http.ResponseWriter, r *http.Request) {
-		f, err := rest.GetOpenAPIFile()
+		protocol := "http"
+		if r.TLS != nil {
+			protocol = "https"
+		}
+		if forwardedProto := r.Header.Get("X-Forwarded-Proto"); forwardedProto != "" {
+			protocol = forwardedProto
+		}
+
+		host := r.Host
+		if host == "" {
+			host = address
+		}
+
+		servedSwagger := *swagger
+		servedSwagger.Servers = openapi3.Servers{
+			&openapi3.Server{
+				URL: "{protocol}://{server}",
+				Variables: map[string]*openapi3.ServerVariable{
+					"protocol": {
+						Default: protocol,
+						Enum:    []string{"http", "https"},
+					},
+					"server": {
+						Default: host,
+					},
+				},
+			},
+		}
+
+		spec, err := json.Marshal(&servedSwagger)
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(f)
+		w.Write(spec)
 	})
 
 	// These are executed after all Chi Middleware, right before the RestAPI function

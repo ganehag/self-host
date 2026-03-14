@@ -2,12 +2,12 @@ openapi: '3.0.0'
 info:
 
   description: |
-    ## Welcome to the official documentation of the NODA Selfhost Program Manager API.
+    ## Welcome to the official documentation of the Self-host Program Manager API.
 
   license:
     name: GPL-3.0-only
     url: https://opensource.org/licenses/GPL-3.0
-  title: NODA Selfhost Program Manager API
+  title: Self-host Program Manager API
   version: 0.1.0
 
 servers:
@@ -341,4 +341,3 @@ paths:
           $ref: '#/components/responses/BadGateway'
         default:
           description: Because this is a proxy request, the response can be anything.
-

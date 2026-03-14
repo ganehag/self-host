@@ -138,6 +138,6 @@ The default secret key is "root" and belongs to the "root" user.
 
 The API server listens for connections on port 8080 on localhost.
 
-Using a browser, visit [http://127.0.0.1:8080/static/swagger-ui/](http://127.0.0.1:8080/static/swagger-ui/), and the API documentation page should greet you.
+Using a browser, visit [http://127.0.0.1:8080/reference](http://127.0.0.1:8080/reference), and the API documentation page should greet you.
 
 When authenticating, use "test" as the username and "root" as the password.

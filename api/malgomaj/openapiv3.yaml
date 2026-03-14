@@ -2,12 +2,12 @@ openapi: '3.0.0'
 info:
 
   description: |
-    ## Welcome to the official documentation of the NODA Selfhost Program Worker API.
+    ## Welcome to the official documentation of the Self-host Program Worker API.
 
   license:
     name: GPL-3.0-only
     url: https://opensource.org/licenses/GPL-3.0
-  title: NODA Selfhost Program Worker API
+  title: Self-host Program Worker API
   version: 0.1.0
 
 servers:
@@ -195,4 +195,3 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
-

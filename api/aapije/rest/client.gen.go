@@ -1995,18 +1995,6 @@ func NewAssembleDatasetPartsByKeyRequest(server string, uuid UuidParam, params *
 	if params != nil {
 		queryValues := queryURL.Query()
 
-		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "partNumber", params.PartNumber, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
-			return nil, err
-		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-			return nil, err
-		} else {
-			for k, v := range parsed {
-				for _, v2 := range v {
-					queryValues.Add(k, v2)
-				}
-			}
-		}
-
 		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "uploadId", params.UploadId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -2072,7 +2060,7 @@ func NewListDatasetPartsByKeyRequest(server string, uuid UuidParam, params *List
 	if params != nil {
 		queryValues := queryURL.Query()
 
-		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "key", params.Key, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "uploadId", params.UploadId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 			return nil, err
@@ -2250,7 +2238,7 @@ func NewDeleteDatasetUploadByKeyRequest(server string, uuid UuidParam, params *D
 	if params != nil {
 		queryValues := queryURL.Query()
 
-		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "key", params.Key, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "uploadId", params.UploadId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 			return nil, err
@@ -5308,6 +5296,7 @@ func (r AssembleDatasetPartsByKeyResponse) StatusCode() int {
 type ListDatasetPartsByKeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON200      *DatasetUploadParts
 }
 
 // Status returns HTTPResponse.Status
@@ -5329,9 +5318,7 @@ func (r ListDatasetPartsByKeyResponse) StatusCode() int {
 type UploadDatasetContentByKeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *struct {
-		Message string `json:"message"`
-	}
+	JSON200      *UploadResult
 }
 
 // Status returns HTTPResponse.Status
@@ -5399,7 +5386,7 @@ type InitializeDatasetUploadByUuidResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		UploadId *string `json:"uploadId,omitempty"`
+		UploadId string `json:"uploadId"`
 	}
 }
 
@@ -5725,7 +5712,6 @@ func (r DeleteProgramByUuidResponse) StatusCode() int {
 type FindProgramByUuidResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Program
 }
 
 // Status returns HTTPResponse.Status
@@ -5768,7 +5754,6 @@ func (r UpdateProgramByUuidResponse) StatusCode() int {
 type GetCodeFromProgramResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Program
 }
 
 // Status returns HTTPResponse.Status
@@ -6308,7 +6293,7 @@ func (r AddUserResponse) StatusCode() int {
 type WhoamiResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]User
+	JSON200      *User
 }
 
 // Status returns HTTPResponse.Status
@@ -7506,6 +7491,16 @@ func ParseListDatasetPartsByKeyResponse(rsp *http.Response) (*ListDatasetPartsBy
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DatasetUploadParts
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -7524,9 +7519,7 @@ func ParseUploadDatasetContentByKeyResponse(rsp *http.Response) (*UploadDatasetC
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Message string `json:"message"`
-		}
+		var dest UploadResult
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -7612,7 +7605,7 @@ func ParseInitializeDatasetUploadByUuidResponse(rsp *http.Response) (*Initialize
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			UploadId *string `json:"uploadId,omitempty"`
+			UploadId string `json:"uploadId"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -7951,16 +7944,6 @@ func ParseFindProgramByUuidResponse(rsp *http.Response) (*FindProgramByUuidRespo
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Program
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
 	return response, nil
 }
 
@@ -7991,16 +7974,6 @@ func ParseGetCodeFromProgramResponse(rsp *http.Response) (*GetCodeFromProgramRes
 	response := &GetCodeFromProgramResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Program
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	}
 
 	return response, nil
@@ -8545,7 +8518,7 @@ func ParseWhoamiResponse(rsp *http.Response) (*WhoamiResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []User
+		var dest User
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

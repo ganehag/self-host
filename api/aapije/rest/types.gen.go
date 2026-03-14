@@ -1109,7 +1109,7 @@ type AlertSeverity string
 // AlertStatus defines model for AlertStatus.
 type AlertStatus string
 
-// CodeRevision defines model for CodeRevision.
+// CodeRevision A stored revision of a program's source code.
 type CodeRevision struct {
 	Checksum string    `json:"checksum"`
 	Created  time.Time `json:"created"`
@@ -1125,7 +1125,7 @@ type CodeRevision struct {
 	SignedBy *string `json:"signed_by"`
 }
 
-// Dataset defines model for Dataset.
+// Dataset Dataset metadata stored by the API.
 type Dataset struct {
 	// Checksum The sha256 checksum of the content
 	Checksum string `json:"checksum"`
@@ -1162,10 +1162,24 @@ type Dataset struct {
 // DatasetFormat File format of the data set.
 type DatasetFormat string
 
-// Error Error message
-type Error = string
+// DatasetUploadPart Metadata for one uploaded dataset part.
+type DatasetUploadPart struct {
+	ChecksumMD5 string    `json:"checksumMD5"`
+	Created     time.Time `json:"created"`
+	PartNumber  int       `json:"partNumber"`
+	Size        int64     `json:"size"`
+}
 
-// Group defines model for Group.
+// DatasetUploadParts State of an in-progress multipart dataset upload.
+type DatasetUploadParts struct {
+	Parts    []DatasetUploadPart `json:"parts"`
+	UploadId string              `json:"uploadId"`
+}
+
+// ErrorText Plain-text error response body.
+type ErrorText = string
+
+// Group Authorization group used to collect policies and assign them to users.
 type Group struct {
 	Name string `json:"name"`
 	Uuid string `json:"uuid"`
@@ -1176,7 +1190,7 @@ type NewAlertReply struct {
 	Uuid string `json:"uuid"`
 }
 
-// Policy defines model for Policy.
+// Policy Access control policy that applies an effect to an action/resource pair.
 type Policy struct {
 	Action    PolicyAction `json:"action"`
 	Effect    PolicyEffect `json:"effect"`
@@ -1192,7 +1206,7 @@ type PolicyAction string
 // PolicyEffect defines model for Policy.Effect.
 type PolicyEffect string
 
-// Program defines model for Program.
+// Program Program metadata for modules, routines, and webhooks.
 type Program struct {
 	// Deadline Ignored for Modules. An duration (in milliseconds) after which a Program (routine, webhook) shall terminate, to avoid long running programs.
 	Deadline int             `json:"deadline"`
@@ -1200,9 +1214,11 @@ type Program struct {
 	Name     string          `json:"name"`
 
 	// Schedule Ignored for Modules and Webhooks. A CRON schedule on the typical [CRON format](https://en.wikipedia.org/wiki/Cron), yet with support for seconds.
-	Schedule string       `json:"schedule"`
-	State    ProgramState `json:"state"`
-	Tags     []string     `json:"tags"`
+	Schedule string `json:"schedule"`
+
+	// State Administrative state of the program.
+	State ProgramState `json:"state"`
+	Tags  []string     `json:"tags"`
 
 	// Type Routines are executed at an interval. Webhooks are called using the REST API. Modules are used by Routines and Webhooks to extend their functionality.
 	Type ProgramType `json:"type"`
@@ -1212,13 +1228,13 @@ type Program struct {
 // ProgramLanguage defines model for Program.Language.
 type ProgramLanguage string
 
-// ProgramState defines model for Program.State.
+// ProgramState Administrative state of the program.
 type ProgramState string
 
 // ProgramType Routines are executed at an interval. Webhooks are called using the REST API. Modules are used by Routines and Webhooks to extend their functionality.
 type ProgramType string
 
-// Thing defines model for Thing.
+// Thing Thing metadata used to group datasets and time series around a logical object.
 type Thing struct {
 	// CreatedBy Reference to a User
 	CreatedBy string     `json:"created_by"`
@@ -1232,7 +1248,7 @@ type Thing struct {
 // ThingState defines model for Thing.State.
 type ThingState string
 
-// Timeseries defines model for Timeseries.
+// Timeseries Time series metadata.
 type Timeseries struct {
 	CreatedBy  string   `json:"created_by"`
 	LowerBound *float64 `json:"lower_bound"`
@@ -1244,21 +1260,21 @@ type Timeseries struct {
 	Uuid       string   `json:"uuid"`
 }
 
-// Token defines model for Token.
+// Token Token metadata without the secret value.
 type Token struct {
 	Created time.Time `json:"created"`
 	Name    string    `json:"name"`
 	Uuid    string    `json:"uuid"`
 }
 
-// TokenWithSecret defines model for TokenWithSecret.
+// TokenWithSecret Token creation response including the one-time secret value.
 type TokenWithSecret struct {
 	Name   string `json:"name"`
 	Secret string `json:"secret"`
 	Uuid   string `json:"uuid"`
 }
 
-// TsResults defines model for TsResults.
+// TsResults Result for one requested time series in a multi-series query.
 type TsResults struct {
 	Data []TsRow `json:"data"`
 
@@ -1266,7 +1282,7 @@ type TsResults struct {
 	Uuid string `json:"uuid"`
 }
 
-// TsRow defines model for TsRow.
+// TsRow One time series sample point.
 type TsRow struct {
 	// Ts Date-time when created, as defined by RFC 3339, section 5.6.
 	Ts time.Time `json:"ts"`
@@ -1275,8 +1291,14 @@ type TsRow struct {
 	V float32 `json:"v"`
 }
 
-// User defines model for User.
+// UploadResult Confirmation payload for successful part upload.
+type UploadResult struct {
+	Message string `json:"message"`
+}
+
+// User User account visible within a domain.
 type User struct {
+	// Groups Groups currently assigned to the user.
 	Groups []Group `json:"groups"`
 	Name   string  `json:"name"`
 	Uuid   string  `json:"uuid"`
@@ -1368,7 +1390,7 @@ type NewAlert struct {
 
 // NewDataset defines model for NewDataset.
 type NewDataset struct {
-	// Content Content of the resource.
+	// Content Base64 encoded content of the dataset resource.
 	Content *[]byte          `json:"content"`
 	Format  NewDatasetFormat `json:"format"`
 	Name    string           `json:"name"`
@@ -1492,7 +1514,7 @@ type UpdateAlert struct {
 	Value    *string        `json:"value,omitempty"`
 }
 
-// UpdateDataset The max allowed size of the complete request body is 1048576 bytes (1 MB). Performing a request with a Content-Length over this limit will result in a 400, malformed request error.
+// UpdateDataset The max allowed size of the complete request body is 1048576 bytes (1 MB). Larger content should be uploaded through the multipart dataset upload flow.
 type UpdateDataset struct {
 	// Content Base64 encoded content. Used for smaller uploads.
 	Content *[]byte              `json:"content,omitempty"`
@@ -1645,7 +1667,7 @@ type FindAlertsParams struct {
 	// Severity Alert severity
 	Severity *SeverityFilterParam `form:"severity,omitempty" json:"severity,omitempty"`
 
-	// Tags Array of tags to match on
+	// Tags Array of tags to match on. All listed tags must match for a result to be returned.
 	Tags *TagsFilterParam `form:"tags,omitempty" json:"tags,omitempty"`
 
 	// Service Array of services to match on
@@ -1696,13 +1718,13 @@ type FindDatasetsParams struct {
 	// Limit The numbers of items to return.
 	Limit *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
 
-	// Tags Array of tags to match on
+	// Tags Array of tags to match on. All listed tags must match for a result to be returned.
 	Tags *TagsFilterParam `form:"tags,omitempty" json:"tags,omitempty"`
 }
 
 // AddDatasetsJSONBody defines parameters for AddDatasets.
 type AddDatasetsJSONBody struct {
-	// Content Content of the resource.
+	// Content Base64 encoded content of the dataset resource.
 	Content *[]byte                   `json:"content"`
 	Format  AddDatasetsJSONBodyFormat `json:"format"`
 	Name    string                    `json:"name"`
@@ -1736,14 +1758,13 @@ type UpdateDatasetByUuidJSONBodyFormat string
 
 // AssembleDatasetPartsByKeyParams defines parameters for AssembleDatasetPartsByKey.
 type AssembleDatasetPartsByKeyParams struct {
-	PartNumber int    `form:"partNumber" json:"partNumber"`
 	UploadId   string `form:"uploadId" json:"uploadId"`
 	ContentMD5 string `json:"Content-MD5"`
 }
 
 // ListDatasetPartsByKeyParams defines parameters for ListDatasetPartsByKey.
 type ListDatasetPartsByKeyParams struct {
-	Key string `form:"key" json:"key"`
+	UploadId string `form:"uploadId" json:"uploadId"`
 }
 
 // UploadDatasetContentByKeyParams defines parameters for UploadDatasetContentByKey.
@@ -1765,7 +1786,7 @@ type GetRawDatasetByUuidParams struct {
 
 // DeleteDatasetUploadByKeyParams defines parameters for DeleteDatasetUploadByKey.
 type DeleteDatasetUploadByKeyParams struct {
-	Key string `form:"key" json:"key"`
+	UploadId string `form:"uploadId" json:"uploadId"`
 }
 
 // FindGroupsParams defines parameters for FindGroups.
@@ -1838,7 +1859,7 @@ type FindProgramsParams struct {
 	// Limit The numbers of items to return.
 	Limit *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
 
-	// Tags Array of tags to match on
+	// Tags Array of tags to match on. All listed tags must match for a result to be returned.
 	Tags *TagsFilterParam `form:"tags,omitempty" json:"tags,omitempty"`
 }
 
@@ -1913,7 +1934,7 @@ type FindThingsParams struct {
 	// Offset The number of items to skip before starting to collect the result set.
 	Offset *OffsetParam `form:"offset,omitempty" json:"offset,omitempty"`
 
-	// Tags Array of tags to match on
+	// Tags Array of tags to match on. All listed tags must match for a result to be returned.
 	Tags *TagsFilterParam `form:"tags,omitempty" json:"tags,omitempty"`
 }
 
@@ -1955,7 +1976,7 @@ type FindTimeSeriesParams struct {
 	// Offset The number of items to skip before starting to collect the result set.
 	Offset *OffsetParam `form:"offset,omitempty" json:"offset,omitempty"`
 
-	// Tags Array of tags to match on
+	// Tags Array of tags to match on. All listed tags must match for a result to be returned.
 	Tags *TagsFilterParam `form:"tags,omitempty" json:"tags,omitempty"`
 }
 
@@ -1998,10 +2019,10 @@ type UpdateTimeseriesByUuidJSONBody struct {
 
 // DeleteDataFromTimeSeriesParams defines parameters for DeleteDataFromTimeSeries.
 type DeleteDataFromTimeSeriesParams struct {
-	// Start Start (>=) of time period. The period (start to end) can **not** exceed 1 year. Defaults to `now`.
+	// Start Start (>=) of time period. The period (start to end) can **not** exceed 1 year.
 	Start RangeStartParam `form:"start" json:"start"`
 
-	// End End (<=) of time period. The period (start to end) can **not** exceed 1 year. Defaults to `now`.
+	// End End (<=) of time period. The period (start to end) can **not** exceed 1 year.
 	End RangeEndParam `form:"end" json:"end"`
 
 	// Ge Value should be greater or equal to (>=) this.
@@ -2013,10 +2034,10 @@ type DeleteDataFromTimeSeriesParams struct {
 
 // QueryTimeseriesForDataParams defines parameters for QueryTimeseriesForData.
 type QueryTimeseriesForDataParams struct {
-	// Start Start (>=) of time period. The period (start to end) can **not** exceed 1 year. Defaults to `now`.
+	// Start Start (>=) of time period. The period (start to end) can **not** exceed 1 year.
 	Start RangeStartParam `form:"start" json:"start"`
 
-	// End End (<=) of time period. The period (start to end) can **not** exceed 1 year. Defaults to `now`.
+	// End End (<=) of time period. The period (start to end) can **not** exceed 1 year.
 	End RangeEndParam `form:"end" json:"end"`
 
 	// Unit The SI unit of the result. A cast will occur if the base unit differes.
@@ -2034,7 +2055,7 @@ type QueryTimeseriesForDataParams struct {
 	// Aggregate When using `precision`. Select this aggregate function instead of the default `avg` when computing the result. Does nothing when `precision` is not set.
 	Aggregate *QueryTimeseriesForDataParamsAggregate `form:"aggregate,omitempty" json:"aggregate,omitempty"`
 
-	// Timezone Act as this time zone. Defaults to `UTC`.
+	// Timezone Act as this time zone when grouping or formatting timestamps. Defaults to `UTC`.
 	Timezone *TimezoneParam `form:"timezone,omitempty" json:"timezone,omitempty"`
 }
 
@@ -2058,10 +2079,10 @@ type FindTsdataByQueryParams struct {
 	// Uuids A series of timeseries UUIDs to search for
 	Uuids []string `form:"uuids" json:"uuids"`
 
-	// Start Start (>=) of time period. The period (start to end) can **not** exceed 1 year. Defaults to `now`.
+	// Start Start (>=) of time period. The period (start to end) can **not** exceed 1 year.
 	Start RangeStartParam `form:"start" json:"start"`
 
-	// End End (<=) of time period. The period (start to end) can **not** exceed 1 year. Defaults to `now`.
+	// End End (<=) of time period. The period (start to end) can **not** exceed 1 year.
 	End RangeEndParam `form:"end" json:"end"`
 
 	// Ge Value should be greater or equal to (>=) this.
@@ -2076,7 +2097,7 @@ type FindTsdataByQueryParams struct {
 	// Aggregate When using `precision`. Select this aggregate function instead of the default `avg` when computing the result. Does nothing when `precision` is not set.
 	Aggregate *FindTsdataByQueryParamsAggregate `form:"aggregate,omitempty" json:"aggregate,omitempty"`
 
-	// Timezone Act as this time zone. Defaults to `UTC`.
+	// Timezone Act as this time zone when grouping or formatting timestamps. Defaults to `UTC`.
 	Timezone *TimezoneParam `form:"timezone,omitempty" json:"timezone,omitempty"`
 }
 

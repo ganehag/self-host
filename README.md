@@ -15,9 +15,9 @@
 [![Juvuln](https://github.com/self-host/self-host/actions/workflows/juvuln.yml/badge.svg)](https://github.com/self-host/self-host/actions/workflows/juvuln.yml)
 [![Malgomaj](https://github.com/self-host/self-host/actions/workflows/malgomaj.yml/badge.svg)](https://github.com/self-host/self-host/actions/workflows/malgomaj.yml)
 
-# Self-host by NODA
+# Self-host
 
-Roll your own NODA API compatible server and host the data yourself.
+Roll your own self-hosted API compatible server and host the data yourself.
 
 Made in Sweden :sweden: by skilled artisan software engineers.
 

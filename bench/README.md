@@ -9,7 +9,7 @@ It has two parts:
 
 It also includes a local Docker workflow:
 
-- `bench/run-local.sh`: bring up PostgreSQL + `aapije`, apply migrations, seed data, and run a scenario
+- `bench/run-local.sh`: bring up PostgreSQL + `aapije`, apply migrations, seed data, and optionally run a scenario
 - `bench/down-local.sh`: tear the local stack down
 
 `bench/run-local.sh` builds `selfbench` and writes its manifest into temporary paths by default, so it does not leave generated files in the repo unless `MANIFEST_PATH` is set explicitly.
@@ -77,10 +77,16 @@ Mixed:
 
 ## One-command local Docker run
 
-Run the default smoke scenario:
+Set up the local stack and seed data:
 
 ```bash
 ./bench/run-local.sh
+```
+
+Run the smoke scenario after setup:
+
+```bash
+./bench/run-local.sh bench/scenarios/local-smoke.yaml
 ```
 
 Run a different scenario:

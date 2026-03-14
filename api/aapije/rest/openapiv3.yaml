@@ -5,7 +5,7 @@ info:
     url: https://github.com/self-host/self-host
 
   description: |
-    ## Welcome to the official documentation of the NODA Selfhost API.
+    ## Welcome to the official documentation of the Self-host API.
 
     The API consists of 8 categories:
     
@@ -25,6 +25,26 @@ info:
     To authenticate you are going to need a unique `access key` for each `domain` you wish to access.
     
     The `domain` name is the `username` part of an ordinary HTTP BasicAuth request, the `access key` is the `password`.
+
+    ### Response formats
+
+    Successful responses are usually JSON unless the endpoint explicitly returns raw content such as
+    dataset bodies, program source code, or textual diffs.
+
+    Error responses are returned as plain text payloads.
+
+    ### Caching
+
+    Dataset raw-content downloads expose an `ETag` header and support `If-None-Match`.
+
+    ### Large dataset uploads
+
+    Larger dataset content updates use a multi-step upload flow:
+
+    1. Create an upload session with `POST /v2/datasets/{uuid}/uploads`
+    2. Upload one or more parts with `PUT /v2/datasets/{uuid}/parts`
+    3. Inspect uploaded parts with `GET /v2/datasets/{uuid}/parts`
+    4. Finalize the upload with `POST /v2/datasets/{uuid}/assemble`
     
     ### Status codes
     All error requests will respond with one out of the following status codes:
@@ -32,8 +52,11 @@ info:
     - 400 Bad request.
     - 401 Unauthorized.
     - 404 Not found.
+    - 411 Length required.
+    - 413 Content too large.
     - 409 Conflict.
     - 429 Too many requests.
+    - 501 Not implemented.
     - 500 Internal server error.
 
     Many requests may also respond with one out of the following status codes:
@@ -46,7 +69,7 @@ info:
   license:
     name: GPL-3.0-only
     url: https://opensource.org/licenses/GPL-3.0
-  title: NODA Self-host API
+  title: Self-host API
   version: 0.1.0
 
 servers:
@@ -78,7 +101,7 @@ tags:
   - name: programs
     description: Programs are code segments executed either as part of another code segment (module), as a program that runs ever so often (program) or as an externaly triggered call (webhook).
   - name: alerts
-    description: Storage location for alerts. A basic bucket to mangage various alert notifications.
+    description: Alert records used for event and incident style notifications.
 
 components:
 
@@ -127,25 +150,25 @@ components:
       content:
         text/plain; charset=utf-8:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorText'
     BadRequest:
       description: The request does not follow specification.
       content:
         text/plain; charset=utf-8:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorText'
     Unauthorized: 
       description: Invalid authentication credentials.
       content:
         text/plain; charset=utf-8:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorText'
     Forbidden:
       description: Not allowed to perform the action.
       content:
         text/plain; charset=utf-8:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorText'
     NotModified:
       description: The resource has not been modified
     NotFound:
@@ -153,40 +176,48 @@ components:
       content:
         text/plain; charset=utf-8:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorText'
     ContentTooLarge:
       description: The request contains an element that excedes the allowed size.
       content:
         text/plain; charset=utf-8:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorText'
+    LengthRequired:
+      description: The request requires a Content-Length header.
+      content:
+        text/plain; charset=utf-8:
+          schema:
+            $ref: '#/components/schemas/ErrorText'
     Conflict:
       description: The request caused a conflict.
       content:
         text/plain; charset=utf-8:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorText'
     InternalServerError:
       description:   Internal server error
       content:
         text/plain; charset=utf-8:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorText'
     UnexpectedError:
       description: Unexpected error
       content:
         text/plain; charset=utf-8:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorText'
     TooManyRequests:
       description: Too many request in the allowed time period.
       content:
         text/plain; charset=utf-8:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorText'
       headers:
         X-RateLimit-Limit:
           $ref: '#/components/headers/X-RateLimit-Limit'
+    NotImplemented:
+      description: The endpoint exists in the API surface but is not implemented yet.
 
   parameters:
     ifNoneMatchParam:
@@ -239,13 +270,13 @@ components:
       example: ['1896048c-bdc9-43c4-af41-4a946b9a341e']
       schema:
         type: array
-        maxLength: 10
+        maxItems: 10
         items:
           type: string
     rangeStartParam:
       in: query
       name: start
-      description: Start (>=) of time period. The period (start to end) can **not** exceed 1 year. Defaults to `now`.
+      description: Start (>=) of time period. The period (start to end) can **not** exceed 1 year.
       required: true
       schema:
         type: string
@@ -254,7 +285,7 @@ components:
     rangeEndParam:
       in: query
       name: end
-      description: End (<=) of time period. The period (start to end) can **not** exceed 1 year. Defaults to `now`.
+      description: End (<=) of time period. The period (start to end) can **not** exceed 1 year.
       required: true
       schema:
         type: string
@@ -301,18 +332,18 @@ components:
         type: array
         items:
           type: string
-        maxLength: 5
+        maxItems: 5
     tagsFilterParam:
       in: query
       name: tags
-      description: Array of tags to match on
+      description: Array of tags to match on. All listed tags must match for a result to be returned.
       required: false
       style: form
       schema:
         type: array
         items:
           type: string
-        maxLength: 5
+        maxItems: 5
     resourceFilterParam:
       in: query
       name: resource
@@ -403,9 +434,10 @@ components:
     timezoneParam:
       in: query
       name: timezone
-      description: Act as this time zone. Defaults to `UTC`.
+      description: Act as this time zone when grouping or formatting timestamps. Defaults to `UTC`.
       schema:
         type: string
+        example: Europe/Stockholm
 
   requestBodies:
     NewAlert:
@@ -466,7 +498,11 @@ components:
                 example: "aGVsbG8sIHdvcmxkIQo="
 
     NewDataset:
-      description: Dataset to add to the system
+      description: |
+        Dataset to add to the system.
+
+        Use the inline `content` field for smaller payloads. For larger content updates, create the
+        dataset first and then use the multipart dataset upload endpoints.
       required: true
       content:
         application/json:
@@ -486,7 +522,7 @@ components:
                 example: ini
               content:
                 type: string
-                description: Content of the resource.
+                description: Base64 encoded content of the dataset resource.
                 format: byte
                 example: 'aGVsbG8sIHdvcmxkIQ=='
                 nullable: true
@@ -675,7 +711,10 @@ components:
                 example: "My first secret token"
 
     NewTsData:
-      description: Time series data
+      description: |
+        Time series data points.
+
+        Each element contains a numeric value `v` and timestamp `ts`.
       required: true
       content:
         application/json:
@@ -756,7 +795,7 @@ components:
           schema:
             description: >
                 The max allowed size of the complete request body is 1048576 bytes (1 MB).
-                Performing a request with a Content-Length over this limit will result in a 400, malformed request error.
+                Larger content should be uploaded through the multipart dataset upload flow.
             properties:
               name:
                 type: string
@@ -1070,6 +1109,7 @@ components:
           nullable: true
 
     CodeRevision:
+      description: A stored revision of a program's source code.
       required:
         - revision
         - created
@@ -1094,12 +1134,10 @@ components:
         signed:
           type: string
           format: date-time
-          example: null
           nullable: true
         signed_by:
           type: string
           description: User UUID
-          example: null
           nullable: true
         checksum:
           type: string
@@ -1107,7 +1145,63 @@ components:
           maxLength: 64
           example: '87cbebfeebc05f7c54ac9336c4b4bbec831227a641951a4bde7edd56020f8590'
 
+    ErrorText:
+      description: Plain-text error response body.
+      type: string
+      example: Unauthorized
+
+    DatasetUploadPart:
+      description: Metadata for one uploaded dataset part.
+      required:
+        - partNumber
+        - size
+        - checksumMD5
+        - created
+      properties:
+        partNumber:
+          type: integer
+          minimum: 1
+          example: 1
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 5242880
+        checksumMD5:
+          type: string
+          minLength: 32
+          maxLength: 32
+          example: 098f6bcd4621d373cade4e832627b4f6
+        created:
+          type: string
+          format: date-time
+          example: '2026-03-14T12:00:00Z'
+
+    DatasetUploadParts:
+      description: State of an in-progress multipart dataset upload.
+      required:
+        - uploadId
+        - parts
+      properties:
+        uploadId:
+          type: string
+          example: 0c1a8e6e-c967-4fd1-91ea-70cd49aa3f1f
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatasetUploadPart'
+
+    UploadResult:
+      description: Confirmation payload for successful part upload.
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: uploaded
+
     Dataset:
+      description: Dataset metadata stored by the API.
       required:
         - uuid
         - name
@@ -1168,6 +1262,7 @@ components:
           type: array
           items:
             type: string
+          example: ["configuration", "external-service"]
 
     Error:
       description: Error message
@@ -1175,6 +1270,7 @@ components:
       example: "Error message"
 
     Group:
+      description: Authorization group used to collect policies and assign them to users.
       required:
         - uuid
         - name
@@ -1185,7 +1281,7 @@ components:
         name:
           type: string
           minLength: 3
-          example: "alice"
+          example: "operator"
           
     NewAlertReply:
       description: The model returned when an Alert was created.
@@ -1197,6 +1293,7 @@ components:
           example: 'a9214980-2c89-42e4-a08d-71689af86b67'
 
     Policy:
+      description: Access control policy that applies an effect to an action/resource pair.
       required:
         - uuid
         - group_uuid
@@ -1228,6 +1325,7 @@ components:
           example: 'timeseries/%'
 
     Program:
+      description: Program metadata for modules, routines, and webhooks.
       required:
         - uuid
         - name
@@ -1250,8 +1348,10 @@ components:
           enum: [module, routine, webhook]
           example: "routine"
         state:
+          description: Administrative state of the program.
           type: string
           enum: [active, inactive, failed]
+          example: active
         schedule:
           description: Ignored for Modules and Webhooks. A CRON schedule on the typical [CRON format](https://en.wikipedia.org/wiki/Cron), yet with support for seconds.
           type: string
@@ -1268,8 +1368,10 @@ components:
           type: array
           items:
             type: string
+          example: ["myprog", "awesome"]
 
     Thing:
+      description: Thing metadata used to group datasets and time series around a logical object.
       required:
         - uuid
         - name
@@ -1301,8 +1403,10 @@ components:
           type: array
           items:
             type: string
+          example: ["building", "office"]
 
     Timeseries:
+      description: Time series metadata.
       required:  
         - uuid
         - thing_uuid
@@ -1315,29 +1419,38 @@ components:
       properties:
         uuid:
           type: string
+          example: '60919547-0f48-4890-90bc-15b71f219f1b'
         thing_uuid:
           type: string
           nullable: true
+          example: 'd2538949-90e9-4127-8251-764a4a7426cf'
         created_by:
           type: string
+          example: '5d8c23d7-3a78-4159-aa40-e3ef3d9bfe55'
         name:
           type: string
+          example: 'South entrance temperature'
         si_unit:
           type: string
+          example: C
         lower_bound:
           type: number
           nullable: true
           format: double
+          example: -50
         upper_bound:
           type: number
           nullable: true
           format: double
+          example: 50
         tags:
           type: array
           items:
             type: string
+          example: ["temperature", "GATE31", "avg1h"]
 
     Token:
+      description: Token metadata without the secret value.
       required:
         - uuid
         - name
@@ -1355,6 +1468,7 @@ components:
           example: '2020-03-09T09:48:30.035+02:00'
           
     TokenWithSecret:
+      description: Token creation response including the one-time secret value.
       required:
         - uuid
         - name
@@ -1372,6 +1486,7 @@ components:
           example: 'secret-token.Ya4bd4za6GzDaaT43dplq'
 
     TsRow:
+      description: One time series sample point.
       required:
         - v
         - ts
@@ -1384,8 +1499,10 @@ components:
           description: Date-time when created, as defined by RFC 3339, section 5.6.
           type: string
           format: date-time
+          example: '2026-03-14T12:00:00Z'
 
     TsResults:
+      description: Result for one requested time series in a multi-series query.
       required:
         - uuid
         - data
@@ -1400,6 +1517,7 @@ components:
             $ref: '#/components/schemas/TsRow'
 
     User:
+      description: User account visible within a domain.
       required:  
         - uuid
         - name
@@ -1413,6 +1531,7 @@ components:
           minLength: 3
           example: "alice"
         groups:
+          description: Groups currently assigned to the user.
           type: array
           items:
             $ref: '#/components/schemas/Group'
@@ -1421,6 +1540,8 @@ components:
     BasicAuth:
       type: http
       scheme: basic
+      description: |
+        Use the domain name as the BasicAuth username and the domain access key as the password.
 
 security:
   - BasicAuth: []
@@ -1775,6 +1896,8 @@ paths:
                 format: binary
         '304':
           $ref: '#/components/responses/NotModified'
+        '204':
+          description: No dataset content is stored for the resource.
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1798,12 +1921,6 @@ paths:
           maxLength: 32
         required: true
       - in: query
-        name: partNumber
-        schema:
-          type: integer
-          minimum: 1
-        required: true
-      - in: query
         name: uploadId
         schema:
           type: string
@@ -1818,6 +1935,8 @@ paths:
       summary: Assemble the uploaded parts. TBD.
       operationId: assemble dataset parts by key
       responses:
+        '204':
+          $ref: '#/components/responses/Updated'
         '400':
           description: >
             One of (message);
@@ -1853,7 +1972,7 @@ paths:
           - "read:datasets/{uuid}"
       parameters:
         - in: query
-          name: key
+          name: uploadId
           schema:
             type: string
           required: true
@@ -1862,6 +1981,12 @@ paths:
       description: List all of the uploaded parts
       operationId: list dataset parts by key
       responses:
+        '200':
+          description: Uploaded parts for the active upload session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetUploadParts'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1910,12 +2035,7 @@ paths:
           content:
             application/json:
               schema:
-                required:
-                  - message
-                properties:
-                  message:
-                    type: string
-                    example: 'EntityTooSmall'
+                $ref: '#/components/schemas/UploadResult'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1947,11 +2067,24 @@ paths:
           content:
             application/json:
               schema:
+                type: object
+                required:
+                  - uploadId
                 properties:
                   uploadId:
                     type: string
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
     delete:
       security:
@@ -1960,7 +2093,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/uuidParam'
         - in: query
-          name: key
+          name: uploadId
           schema:
             type: string
           required: true
@@ -2398,9 +2531,10 @@ paths:
         '200':
           description: Success
           content:
-            application/json:
+            text/plain; charset=utf-8:
               schema:
-                $ref: '#/components/schemas/Program'
+                type: string
+                format: binary
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2474,24 +2608,15 @@ paths:
       security:
         - BasicAuth:
           - "create:programs/{uuid}/webhook"
-      summary: TBD
-      description: An endpoint (webhook) which forwards the request to a Program.
+      summary: Execute a webhook program
+      description: |
+        Accepts a webhook-style call for the program identified by `uuid`.
+
+        The current server implementation returns `501 Not Implemented`.
       operationId: execute program webhook
       responses:
-        '200':
-          description: Success
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
 
   /v2/programs/{uuid}/code:
     parameters:
@@ -2527,6 +2652,10 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '411':
+          $ref: '#/components/responses/LengthRequired'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '500':
@@ -2544,9 +2673,10 @@ paths:
         '200':
           description: Success
           content:
-            application/json:
+            text/plain; charset=utf-8:
               schema:
-                $ref: '#/components/schemas/Program'
+                type: string
+                format: binary
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3211,7 +3341,7 @@ paths:
           example: ['1896048c-bdc9-43c4-af41-4a946b9a341e']
           schema:
             type: array
-            maxLength: 10
+            maxItems: 10
             items:
               type: string
         - $ref: '#/components/parameters/rangeStartParam'
@@ -3251,7 +3381,7 @@ paths:
         - BasicAuth:
           - "read:users"
       summary: Returns a list of user objects.
-      description: ...
+      description: Returns the users visible within the authenticated domain, ordered by the service implementation.
       operationId: find users
       parameters:
         - $ref: '#/components/parameters/limitParam'
@@ -3333,9 +3463,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/User'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3472,26 +3600,17 @@ paths:
       security:
         - BasicAuth:
           - "update:users/{uuid}/rate"
-      summary: TBD
-      description: Change the allowed request rate for a user
+      summary: Set a user's request rate
+      description: |
+        Intended to change the allowed request rate for a user.
+
+        The current server implementation returns `501 Not Implemented`.
       operationId: set request rate for user
       requestBody:
         $ref: "#/components/requestBodies/UpdateRequestRate"
       responses:
-        '204':
-          $ref: '#/components/responses/Updated'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
 
   /v2/users/{uuid}/tokens:
     parameters:

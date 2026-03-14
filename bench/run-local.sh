@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/bench/docker/compose.yaml"
-SCENARIO_PATH="${1:-bench/scenarios/local-smoke.yaml}"
+SCENARIO_PATH="${1:-}"
 PG_URI="${PG_URI:-postgresql://postgres:mysecretpassword@127.0.0.1:5432/selfhost-bench?sslmode=disable}"
 BENCH_BIN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/selfbench.XXXXXX")"
 BENCH_BIN="$BENCH_BIN_DIR/selfbench"
@@ -74,8 +74,14 @@ echo "seeding benchmark dataset"
   --start "${BENCH_START:-2024-01-01T00:00:00Z}" \
   --manifest "$MANIFEST_PATH"
 
-echo "running scenario: $SCENARIO_PATH"
-"$BENCH_BIN" run \
-  --config "$SCENARIO_PATH" \
-  --manifest "$MANIFEST_PATH" \
-  --pg-uri "$PG_URI"
+if [[ -n "$SCENARIO_PATH" ]]; then
+  echo "running scenario: $SCENARIO_PATH"
+  "$BENCH_BIN" run \
+    --config "$SCENARIO_PATH" \
+    --manifest "$MANIFEST_PATH" \
+    --pg-uri "$PG_URI"
+else
+  echo "setup complete; no scenario specified"
+  echo "run a scenario with: ./bench/run-local.sh bench/scenarios/local-smoke.yaml"
+  echo "manifest written to: $MANIFEST_PATH"
+fi

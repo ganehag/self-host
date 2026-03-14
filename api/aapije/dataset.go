@@ -354,7 +354,7 @@ func (ra *RestApi) DeleteDatasetUploadByKey(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := uploadSvc.CancelUpload(r.Context(), datasetUUID, p.Key); err != nil {
+	if err := uploadSvc.CancelUpload(r.Context(), datasetUUID, p.UploadId); err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
 		return
 	}
@@ -382,7 +382,7 @@ func (ra *RestApi) ListDatasetPartsByKey(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	parts, err := uploadSvc.ListParts(r.Context(), datasetUUID, p.Key)
+	parts, err := uploadSvc.ListParts(r.Context(), datasetUUID, p.UploadId)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
 		return
@@ -390,7 +390,7 @@ func (ra *RestApi) ListDatasetPartsByKey(w http.ResponseWriter, r *http.Request,
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]any{
-		"uploadId": p.Key,
+		"uploadId": p.UploadId,
 		"parts":    parts,
 	})
 }
