@@ -160,7 +160,11 @@ func (ra *RestApi) FindDatasetsForThing(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	srv := services.NewDatasetService(db)
+	srv, err := services.NewDatasetService(db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
 	datasets, err := srv.FindByThing(r.Context(), thingUUID)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))

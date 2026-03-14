@@ -43,8 +43,8 @@ func TestFindPoliciesUsesSamePrioritySemanticsAsRuntimeChecks(t *testing.T) {
 
 	if _, err := policies.Add(ctx, NewPolicyParams{
 		GroupUuid: viewerGroupID,
-		Priority:  50,
-		Effect:    "allow",
+		Priority:  100,
+		Effect:    "deny",
 		Action:    "read",
 		Resource:  "policies/%",
 	}); err != nil {
@@ -64,8 +64,8 @@ func TestFindPoliciesUsesSamePrioritySemanticsAsRuntimeChecks(t *testing.T) {
 
 	if _, err := policies.Add(ctx, NewPolicyParams{
 		GroupUuid: viewerGroupID,
-		Priority:  100,
-		Effect:    "deny",
+		Priority:  50,
+		Effect:    "allow",
 		Action:    "read",
 		Resource:  "policies/" + target.Uuid,
 	}); err != nil {
@@ -87,7 +87,7 @@ func TestFindPoliciesUsesSamePrioritySemanticsAsRuntimeChecks(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("expected lower-priority broad allow to keep policy visible despite later deny")
+		t.Fatal("expected higher-priority specific allow to keep policy visible despite later broad deny")
 	}
 
 	if _, err := policies.Add(ctx, NewPolicyParams{

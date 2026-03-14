@@ -34,9 +34,9 @@ type DatasetService struct {
 }
 
 // NewDatasetService instantiates the DatasetService repository.
-func NewDatasetService(db *sql.DB, opts ...DatasetStorageOptions) *DatasetService {
+func NewDatasetService(db *sql.DB, opts ...DatasetStorageOptions) (*DatasetService, error) {
 	if db == nil {
-		return nil
+		return nil, nil
 	}
 
 	var opt DatasetStorageOptions
@@ -44,14 +44,17 @@ func NewDatasetService(db *sql.DB, opts ...DatasetStorageOptions) *DatasetServic
 		opt = opts[0]
 	}
 
-	store, _ := NewDatasetObjectStore(context.Background(), opt)
+	store, err := NewDatasetObjectStore(context.Background(), opt)
+	if err != nil {
+		return nil, err
+	}
 
 	return &DatasetService{
 		q:     postgres.New(db),
 		db:    db,
 		store: store,
 		opt:   opt,
-	}
+	}, nil
 }
 
 type AddDatasetParams struct {

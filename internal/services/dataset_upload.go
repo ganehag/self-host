@@ -107,6 +107,8 @@ func (svc *DatasetUploadService) CreateUpload(ctx context.Context, datasetUUID u
 				Bucket:  params.StorageBucket,
 				Key:     params.StorageKey,
 			}, params.BackendUploadID)
+		} else {
+			_ = os.RemoveAll(svc.uploadDir(uploadID))
 		}
 		return nil, err
 	}
@@ -167,6 +169,9 @@ func (svc *DatasetUploadService) UploadPart(ctx context.Context, datasetUUID uui
 		ChecksumMd5: actualMD5,
 		Etag:        "",
 	})
+	if err != nil {
+		_ = os.Remove(partPath)
+	}
 	return err
 }
 

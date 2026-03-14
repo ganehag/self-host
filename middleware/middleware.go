@@ -22,8 +22,9 @@ func sendError(w http.ResponseWriter, code int, message string) {
 		Code:    int32(code),
 		Message: message,
 	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(reqErr)
+	_ = json.NewEncoder(w).Encode(reqErr)
 }
 
 // Type declaration of MiddlewareFunc

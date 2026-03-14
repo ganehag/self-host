@@ -456,13 +456,18 @@ func (ra *RestApi) newDatasetUploadService(r *http.Request, db *sql.DB) (*servic
 		return nil, err
 	}
 
+	store, err := ra.newDatasetObjectStore(r.Context(), storageOpt)
+	if err != nil {
+		return nil, err
+	}
+
 	return services.NewDatasetUploadService(db, services.DatasetUploadOptions{
 		Domain:       domaintoken.Domain,
 		RootDir:      viper.GetString("dataset_uploads.root_dir"),
 		MaxPartSize:  viper.GetInt64("dataset_uploads.max_part_size"),
 		MaxTotalSize: viper.GetInt64("dataset_uploads.max_total_size"),
 		Storage:      storageOpt,
-		Store:        mustDatasetObjectStore(r.Context(), storageOpt),
+		Store:        store,
 	}), nil
 }
 
@@ -477,7 +482,7 @@ func (ra *RestApi) newDatasetService(r *http.Request, db *sql.DB) (*services.Dat
 		return nil, err
 	}
 
-	return services.NewDatasetService(db, storageOpt), nil
+	return services.NewDatasetService(db, storageOpt)
 }
 
 func (ra *RestApi) datasetStorageOptions(ctx context.Context, domain string) (services.DatasetStorageOptions, error) {
@@ -507,7 +512,6 @@ func (ra *RestApi) datasetStorageOptions(ctx context.Context, domain string) (se
 	return opt, nil
 }
 
-func mustDatasetObjectStore(ctx context.Context, opt services.DatasetStorageOptions) services.DatasetObjectStore {
-	store, _ := services.NewDatasetObjectStore(ctx, opt)
-	return store
+func (ra *RestApi) newDatasetObjectStore(ctx context.Context, opt services.DatasetStorageOptions) (services.DatasetObjectStore, error) {
+	return services.NewDatasetObjectStore(ctx, opt)
 }

@@ -59,9 +59,28 @@ func (f *fakeS3Server) storageOptions() DatasetStorageOptions {
 	}
 }
 
+func TestNewDatasetServiceReturnsStoreConfigurationErrors(t *testing.T) {
+	_, err := NewDatasetService(db, DatasetStorageOptions{
+		Backend: DatasetStorageBackendS3,
+		Domain:  "test",
+		S3: &DatasetS3Options{
+			Region:          "us-east-1",
+			AccessKeyID:     "test",
+			SecretAccessKey: "test",
+			ForcePathStyle:  true,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected dataset service construction to fail for invalid S3 configuration")
+	}
+}
+
 func TestDatasetS3ContentRoundTrip(t *testing.T) {
 	s3srv := newFakeS3Server(t)
-	svc := NewDatasetService(db, s3srv.storageOptions())
+	svc, err := NewDatasetService(db, s3srv.storageOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	content := []byte(`{"hello":"world"}`)
 	ds, err := svc.AddDataset(context.Background(), &AddDatasetParams{
@@ -107,7 +126,10 @@ func TestDatasetS3ContentRoundTrip(t *testing.T) {
 func TestDatasetS3MultipartAssemble(t *testing.T) {
 	s3srv := newFakeS3Server(t)
 	storageOpt := s3srv.storageOptions()
-	dsSvc := NewDatasetService(db, storageOpt)
+	dsSvc, err := NewDatasetService(db, storageOpt)
+	if err != nil {
+		t.Fatal(err)
+	}
 	store, err := NewDatasetObjectStore(context.Background(), storageOpt)
 	if err != nil {
 		t.Fatal(err)
