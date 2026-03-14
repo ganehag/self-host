@@ -571,6 +571,8 @@ components:
                 example: '810d38bb-6a8e-4d36-b853-7350b67cb041'
               priority:
                 type: integer
+                minimum: 0
+                description: Lower numbers are evaluated first.
                 example: 10
               effect:
                 type: string
@@ -583,6 +585,8 @@ components:
               resource:
                 type: string
                 minLength: 1
+                pattern: '^\S(?:.*\S)?$'
+                description: Canonical resource path pattern without leading/trailing slash. Use `%` as a whole wildcard segment, for example `timeseries/%`.
                 example: 'timeseries/%'
 
     NewProgram:
@@ -1311,6 +1315,8 @@ components:
         priority:
           type: integer
           format: int32
+          minimum: 0
+          description: Lower numbers are evaluated first.
           example: 10
         effect:
           type: string
@@ -1322,6 +1328,47 @@ components:
           example: read
         resource:
           type: string
+          description: Canonical resource path pattern without leading/trailing slash. Use `%` as a whole wildcard segment, for example `timeseries/%`.
+          example: 'timeseries/%'
+
+    AuthorizationDecision:
+      description: Explanation of the winning authorization decision for the current token.
+      required:
+        - action
+        - resource
+        - access
+      properties:
+        action:
+          type: string
+          enum: [create, read, update, delete]
+          example: read
+        resource:
+          type: string
+          example: 'timeseries/47daa6eb-bd1c-49de-9782-1e9422a206f5/data'
+        access:
+          type: boolean
+          example: false
+        policy_uuid:
+          type: string
+          nullable: true
+          example: '5ce5d3cd-ff99-4342-a19e-fdb1b5805178'
+        group_uuid:
+          type: string
+          nullable: true
+          example: '810d38bb-6a8e-4d36-b853-7350b67cb041'
+        priority:
+          type: integer
+          format: int32
+          nullable: true
+          example: 10
+        effect:
+          type: string
+          nullable: true
+          enum: [allow, deny]
+          example: deny
+        matched_pattern:
+          type: string
+          nullable: true
           example: 'timeseries/%'
 
     Program:
@@ -2359,6 +2406,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Policy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v2/policies/explain:
+    get:
+      tags:
+        - policies
+      security:
+        - BasicAuth:
+          - "read:policies"
+      summary: Explain a policy decision
+      description: Explain the current token's authorization decision for one action/resource pair.
+      operationId: explain policy decision
+      parameters:
+        - in: query
+          name: action
+          required: true
+          description: Action to evaluate.
+          schema:
+            type: string
+            enum: [create, read, update, delete]
+        - in: query
+          name: resource
+          required: true
+          description: Canonical resource path to evaluate, for example `timeseries/123/data`.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationDecision'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':

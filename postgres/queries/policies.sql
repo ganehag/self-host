@@ -26,33 +26,29 @@ WITH usr AS (
 		sqlc.arg(group_uuids)::uuid[] IS NULL
 	OR
 		group_policies.group_uuid = ANY(sqlc.arg(group_uuids)::uuid[])
-), permitted_policies AS (
-	SELECT *
-	FROM f_group_policies
-	WHERE EXISTS (
-		SELECT 1
-		FROM usr
-		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
-		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
-		WHERE group_policies.action = 'read'
-		AND group_policies.effect = 'allow'
-		AND ('policies/'||f_group_policies.uuid) LIKE group_policies.resource
-	)
-	AND NOT EXISTS (
-		SELECT 1
-		FROM usr
-		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
-		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
-		WHERE group_policies.action = 'read'
-		AND group_policies.effect = 'deny'
-		AND ('policies/'||f_group_policies.uuid) LIKE group_policies.resource
-	)
-	ORDER BY resource DESC, effect ASC, action DESC, priority ASC
-	LIMIT sqlc.arg(arg_limit)::BIGINT
-	OFFSET sqlc.arg(arg_offset)::BIGINT
 )
-SELECT *
-FROM permitted_policies;
+SELECT f_group_policies.*
+FROM usr
+INNER JOIN f_group_policies ON true
+LEFT JOIN LATERAL (
+	SELECT group_policies.effect
+	FROM user_groups
+	INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+	WHERE user_groups.user_uuid = usr.uuid
+	AND group_policies.action = 'read'
+	AND ('policies/' || f_group_policies.uuid) LIKE group_policies.resource
+	ORDER BY group_policies.priority ASC,
+		CASE WHEN group_policies.effect = 'deny' THEN 0 ELSE 1 END ASC
+	LIMIT 1
+) AS match ON true
+WHERE COALESCE(match.effect = 'allow', false)
+ORDER BY
+	f_group_policies.resource DESC,
+	f_group_policies.effect ASC,
+	f_group_policies.action DESC,
+	f_group_policies.priority ASC
+LIMIT sqlc.arg(arg_limit)::BIGINT
+OFFSET sqlc.arg(arg_offset)::BIGINT;
 
 -- name: FindPolicyByUUID :one
 SELECT *

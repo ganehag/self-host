@@ -1,10 +1,11 @@
-// Copyright 2021 The Self-host Authors. All rights reserved.
+// Copyright 2021-2026 The Self-host Authors. All rights reserved.
 // Use of this source code is governed by the GPLv3
 // license that can be found in the LICENSE file.
 
 package aapije
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -15,6 +16,17 @@ import (
 	"github.com/self-host/self-host/internal/services"
 	"github.com/self-host/self-host/pkg/util"
 )
+
+func authorizePolicyGrant(ctx context.Context, pc *services.PolicyCheckService, token []byte, action, resource string) error {
+	canGrant, err := pc.UserHasAccessViaToken(ctx, token, action, resource)
+	if err != nil {
+		return err
+	}
+	if !canGrant {
+		return ie.ErrorForbidden
+	}
+	return nil
+}
 
 // AddPolicy adds a new policy
 func (ra *RestApi) AddPolicy(w http.ResponseWriter, r *http.Request) {
@@ -45,12 +57,8 @@ func (ra *RestApi) AddPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Ensure that the User has the right to create a policy with these access rules
 	pc := services.NewPolicyCheckService(db)
-	canGrant, err := pc.UserHasAccessViaToken(r.Context(), []byte(domaintoken.Token), string(newPolicy.Action), newPolicy.Resource)
-	if err != nil {
+	if err := authorizePolicyGrant(r.Context(), pc, []byte(domaintoken.Token), string(newPolicy.Action), newPolicy.Resource); err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
-		return
-	} else if canGrant == false {
-		ie.SendHTTPError(w, ie.ErrorForbidden)
 		return
 	}
 
@@ -147,6 +155,57 @@ func (ra *RestApi) FindPolicyByUuid(w http.ResponseWriter, r *http.Request, id r
 	json.NewEncoder(w).Encode(policy)
 }
 
+// ExplainPolicyDecision explains the winning policy decision for the current token.
+func (ra *RestApi) ExplainPolicyDecision(w http.ResponseWriter, r *http.Request, p rest.ExplainPolicyDecisionParams) {
+	db, err := ra.GetDB(r)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
+	if ok == false {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
+	checks := services.NewPolicyCheckService(db)
+	decision, err := checks.ExplainUserAccessViaToken(r.Context(), []byte(domaintoken.Token), string(p.Action), p.Resource)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	}
+
+	reply := rest.AuthorizationDecision{
+		Action:   rest.AuthorizationDecisionAction(decision.Action),
+		Resource: decision.Resource,
+		Access:   decision.Access,
+	}
+	if decision.PolicyUUID != nil {
+		v := decision.PolicyUUID.String()
+		reply.PolicyUuid = &v
+	}
+	if decision.GroupUUID != nil {
+		v := decision.GroupUUID.String()
+		reply.GroupUuid = &v
+	}
+	if decision.Priority != nil {
+		v := *decision.Priority
+		reply.Priority = &v
+	}
+	if decision.Effect != nil {
+		v := rest.AuthorizationDecisionEffect(*decision.Effect)
+		reply.Effect = &v
+	}
+	if decision.MatchedPattern != nil {
+		v := *decision.MatchedPattern
+		reply.MatchedPattern = &v
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(reply)
+}
+
 // UpdatePolicyByUuid updates a specific policy by its UUID
 func (ra *RestApi) UpdatePolicyByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
 	// We expect a UpdatePolicy object in the request body.
@@ -168,7 +227,38 @@ func (ra *RestApi) UpdatePolicyByUuid(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
+	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
+	if ok == false {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
 	srv := services.NewPolicyService(db)
+	current, err := srv.FindByUuid(r.Context(), policyUUID)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	}
+
+	nextAction := string(current.Action)
+	if updatePolicy.Action != nil {
+		nextAction = string(*updatePolicy.Action)
+	}
+	nextResource := current.Resource
+	if updatePolicy.Resource != nil {
+		nextResource = *updatePolicy.Resource
+	}
+
+	pc := services.NewPolicyCheckService(db)
+	if err := authorizePolicyGrant(r.Context(), pc, []byte(domaintoken.Token), string(current.Action), current.Resource); err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	}
+	if err := authorizePolicyGrant(r.Context(), pc, []byte(domaintoken.Token), nextAction, nextResource); err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	}
+
 	params := services.UpdatePolicyParams{
 		Priority: updatePolicy.Priority,
 		Effect:   (*string)(updatePolicy.Effect),
@@ -208,7 +298,23 @@ func (ra *RestApi) DeletePolicyByUuid(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
+	domaintoken, ok := r.Context().Value("domaintoken").(*services.DomainToken)
+	if ok == false {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
+
 	s := services.NewPolicyService(db)
+	current, err := s.FindByUuid(r.Context(), policyUUID)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	}
+	pc := services.NewPolicyCheckService(db)
+	if err := authorizePolicyGrant(r.Context(), pc, []byte(domaintoken.Token), string(current.Action), current.Resource); err != nil {
+		ie.SendHTTPError(w, ie.ParseDBError(err))
+		return
+	}
 	_, err = s.Delete(r.Context(), policyUUID)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))

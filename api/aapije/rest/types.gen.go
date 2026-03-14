@@ -80,6 +80,48 @@ func (e AlertStatus) Valid() bool {
 	}
 }
 
+// Defines values for AuthorizationDecisionAction.
+const (
+	AuthorizationDecisionActionCreate AuthorizationDecisionAction = "create"
+	AuthorizationDecisionActionDelete AuthorizationDecisionAction = "delete"
+	AuthorizationDecisionActionRead   AuthorizationDecisionAction = "read"
+	AuthorizationDecisionActionUpdate AuthorizationDecisionAction = "update"
+)
+
+// Valid indicates whether the value is a known member of the AuthorizationDecisionAction enum.
+func (e AuthorizationDecisionAction) Valid() bool {
+	switch e {
+	case AuthorizationDecisionActionCreate:
+		return true
+	case AuthorizationDecisionActionDelete:
+		return true
+	case AuthorizationDecisionActionRead:
+		return true
+	case AuthorizationDecisionActionUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuthorizationDecisionEffect.
+const (
+	AuthorizationDecisionEffectAllow AuthorizationDecisionEffect = "allow"
+	AuthorizationDecisionEffectDeny  AuthorizationDecisionEffect = "deny"
+)
+
+// Valid indicates whether the value is a known member of the AuthorizationDecisionEffect enum.
+func (e AuthorizationDecisionEffect) Valid() bool {
+	switch e {
+	case AuthorizationDecisionEffectAllow:
+		return true
+	case AuthorizationDecisionEffectDeny:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DatasetFormat.
 const (
 	DatasetFormatCsv  DatasetFormat = "csv"
@@ -722,6 +764,30 @@ func (e AddPolicyJSONBodyEffect) Valid() bool {
 	}
 }
 
+// Defines values for ExplainPolicyDecisionParamsAction.
+const (
+	ExplainPolicyDecisionParamsActionCreate ExplainPolicyDecisionParamsAction = "create"
+	ExplainPolicyDecisionParamsActionDelete ExplainPolicyDecisionParamsAction = "delete"
+	ExplainPolicyDecisionParamsActionRead   ExplainPolicyDecisionParamsAction = "read"
+	ExplainPolicyDecisionParamsActionUpdate ExplainPolicyDecisionParamsAction = "update"
+)
+
+// Valid indicates whether the value is a known member of the ExplainPolicyDecisionParamsAction enum.
+func (e ExplainPolicyDecisionParamsAction) Valid() bool {
+	switch e {
+	case ExplainPolicyDecisionParamsActionCreate:
+		return true
+	case ExplainPolicyDecisionParamsActionDelete:
+		return true
+	case ExplainPolicyDecisionParamsActionRead:
+		return true
+	case ExplainPolicyDecisionParamsActionUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UpdatePolicyByUuidJSONBodyAction.
 const (
 	Create UpdatePolicyByUuidJSONBodyAction = "create"
@@ -748,16 +814,16 @@ func (e UpdatePolicyByUuidJSONBodyAction) Valid() bool {
 
 // Defines values for UpdatePolicyByUuidJSONBodyEffect.
 const (
-	Allow UpdatePolicyByUuidJSONBodyEffect = "allow"
-	Deny  UpdatePolicyByUuidJSONBodyEffect = "deny"
+	UpdatePolicyByUuidJSONBodyEffectAllow UpdatePolicyByUuidJSONBodyEffect = "allow"
+	UpdatePolicyByUuidJSONBodyEffectDeny  UpdatePolicyByUuidJSONBodyEffect = "deny"
 )
 
 // Valid indicates whether the value is a known member of the UpdatePolicyByUuidJSONBodyEffect enum.
 func (e UpdatePolicyByUuidJSONBodyEffect) Valid() bool {
 	switch e {
-	case Allow:
+	case UpdatePolicyByUuidJSONBodyEffectAllow:
 		return true
-	case Deny:
+	case UpdatePolicyByUuidJSONBodyEffectDeny:
 		return true
 	default:
 		return false
@@ -1109,6 +1175,24 @@ type AlertSeverity string
 // AlertStatus defines model for AlertStatus.
 type AlertStatus string
 
+// AuthorizationDecision Explanation of the winning authorization decision for the current token.
+type AuthorizationDecision struct {
+	Access         bool                         `json:"access"`
+	Action         AuthorizationDecisionAction  `json:"action"`
+	Effect         *AuthorizationDecisionEffect `json:"effect,omitempty"`
+	GroupUuid      *string                      `json:"group_uuid,omitempty"`
+	MatchedPattern *string                      `json:"matched_pattern,omitempty"`
+	PolicyUuid     *string                      `json:"policy_uuid,omitempty"`
+	Priority       *int32                       `json:"priority,omitempty"`
+	Resource       string                       `json:"resource"`
+}
+
+// AuthorizationDecisionAction defines model for AuthorizationDecision.Action.
+type AuthorizationDecisionAction string
+
+// AuthorizationDecisionEffect defines model for AuthorizationDecision.Effect.
+type AuthorizationDecisionEffect string
+
 // CodeRevision A stored revision of a program's source code.
 type CodeRevision struct {
 	Checksum string    `json:"checksum"`
@@ -1195,9 +1279,13 @@ type Policy struct {
 	Action    PolicyAction `json:"action"`
 	Effect    PolicyEffect `json:"effect"`
 	GroupUuid string       `json:"group_uuid"`
-	Priority  int32        `json:"priority"`
-	Resource  string       `json:"resource"`
-	Uuid      string       `json:"uuid"`
+
+	// Priority Lower numbers are evaluated first.
+	Priority int32 `json:"priority"`
+
+	// Resource Canonical resource path pattern without leading/trailing slash. Use `%` as a whole wildcard segment, for example `timeseries/%`.
+	Resource string `json:"resource"`
+	Uuid     string `json:"uuid"`
 }
 
 // PolicyAction defines model for Policy.Action.
@@ -1416,8 +1504,12 @@ type NewPolicy struct {
 	Action    NewPolicyAction `json:"action"`
 	Effect    NewPolicyEffect `json:"effect"`
 	GroupUuid string          `json:"group_uuid"`
-	Priority  int             `json:"priority"`
-	Resource  string          `json:"resource"`
+
+	// Priority Lower numbers are evaluated first.
+	Priority int `json:"priority"`
+
+	// Resource Canonical resource path pattern without leading/trailing slash. Use `%` as a whole wildcard segment, for example `timeseries/%`.
+	Resource string `json:"resource"`
 }
 
 // NewPolicyAction defines model for NewPolicy.Action.
@@ -1826,8 +1918,12 @@ type AddPolicyJSONBody struct {
 	Action    AddPolicyJSONBodyAction `json:"action"`
 	Effect    AddPolicyJSONBodyEffect `json:"effect"`
 	GroupUuid string                  `json:"group_uuid"`
-	Priority  int                     `json:"priority"`
-	Resource  string                  `json:"resource"`
+
+	// Priority Lower numbers are evaluated first.
+	Priority int `json:"priority"`
+
+	// Resource Canonical resource path pattern without leading/trailing slash. Use `%` as a whole wildcard segment, for example `timeseries/%`.
+	Resource string `json:"resource"`
 }
 
 // AddPolicyJSONBodyAction defines parameters for AddPolicy.
@@ -1835,6 +1931,18 @@ type AddPolicyJSONBodyAction string
 
 // AddPolicyJSONBodyEffect defines parameters for AddPolicy.
 type AddPolicyJSONBodyEffect string
+
+// ExplainPolicyDecisionParams defines parameters for ExplainPolicyDecision.
+type ExplainPolicyDecisionParams struct {
+	// Action Action to evaluate.
+	Action ExplainPolicyDecisionParamsAction `form:"action" json:"action"`
+
+	// Resource Canonical resource path to evaluate, for example `timeseries/123/data`.
+	Resource string `form:"resource" json:"resource"`
+}
+
+// ExplainPolicyDecisionParamsAction defines parameters for ExplainPolicyDecision.
+type ExplainPolicyDecisionParamsAction string
 
 // UpdatePolicyByUuidJSONBody defines parameters for UpdatePolicyByUuid.
 type UpdatePolicyByUuidJSONBody struct {

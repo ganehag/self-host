@@ -67,7 +67,23 @@ Policy ID       Group ID        Priority Effect  Action  Resource
 "dac12...96fc0" "86efe...8c2a"  10       "deny" "create" "timeseries/924...21/%"
 ```
 
-Rules are computed such that all `allow` rules are combined, then all `deny` rules are applied to retract access privileges.
+Rules are computed by selecting the first matching rule when ordered by ascending `priority`.
+If two matching rules have the same `priority`, a `deny` rule wins over an `allow` rule.
+
+This means the system behaves like an ordered policy list, not like a blanket "all allows minus all denies" set operation.
+
+## Operational guidance
+
+Keep policy resources in a canonical path form:
+
+- no leading or trailing `/`
+- no empty path segments
+- no whitespace
+- wildcard segments should be written as `%` on their own, for example `timeseries/%`
+
+Prefer a small number of broad, intentional rules over many overlapping ones. A later rule that is already fully covered by an earlier rule of the same action is dead weight, and the service now rejects those obviously shadowed policies.
+
+The broadest possible rule, `%`, is powerful and cheap to write but expensive to reason about. Use it sparingly and only when you really mean "all resources of this action".
 
 For details on which resource paths are relevant, see the [openapiv3.yaml](https://github.com/self-host/self-host/blob/main/api/aapije/rest/openapiv3.yaml) specification. Look at the `BasicAuth` declaration for each endpoint where the required access privilege is declared on the form; `action:resource_path`.
 

@@ -1,4 +1,4 @@
-// Copyright 2021 The Self-host Authors. All rights reserved.
+// Copyright 2021-2026 The Self-host Authors. All rights reserved.
 // Use of this source code is governed by the GPLv3
 // license that can be found in the LICENSE file.
 
@@ -35,7 +35,7 @@ func PolicyValidator() func(http.Handler) http.Handler {
 
 			}
 
-			ctx := r.Context()
+			ctx := services.WithPolicyCheckCache(r.Context())
 
 			scopes, ok := ctx.Value("BasicAuth.Scopes").([]string)
 			if ok == false {
@@ -49,14 +49,17 @@ func PolicyValidator() func(http.Handler) http.Handler {
 				return
 			}
 
-			// Wire up a policy check service and check if the token has access
+			// Wire up a policy check service and check if the token has access.
+			// Batch checks per action to reduce redundant token-resolution work.
 			check := services.NewPolicyCheckService(db)
+			resourcesByAction := make(map[string][]string)
 
 			for _, scope := range scopes {
 				// Check permission
 				splitScope := strings.Split(scope, ":")
 				if len(splitScope) != 2 {
 					ie.SendHTTPError(w, ie.ErrorUnprocessable)
+					return
 				}
 
 				action := splitScope[0]
@@ -74,7 +77,11 @@ func PolicyValidator() func(http.Handler) http.Handler {
 					}
 				}
 
-				access, err := check.UserHasAccessViaToken(ctx, []byte(apiKey), action, resource)
+				resourcesByAction[action] = append(resourcesByAction[action], resource)
+			}
+
+			for action, resources := range resourcesByAction {
+				access, err := check.UserHasManyAccessViaToken(ctx, []byte(apiKey), action, resources)
 				if err != nil {
 					ie.SendHTTPError(w, ie.ParseDBError(err))
 					return

@@ -8,6 +8,7 @@ package postgres
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 
@@ -89,4 +90,98 @@ func (q *Queries) CheckUserTokenHasAccessMany(ctx context.Context, arg CheckUser
 	var access bool
 	err := row.Scan(&access)
 	return access, err
+}
+
+const explainUserTokenAccessMany = `-- name: ExplainUserTokenAccessMany :many
+WITH usr AS (
+	SELECT user_tokens.user_uuid AS uuid
+	FROM user_tokens
+	WHERE user_tokens.token_hash = sha256($1)
+	LIMIT 1
+), usr_r AS (
+	SELECT
+		usr.uuid,
+		$2::policy_action AS action,
+		unnest((SELECT $3::TEXT[]))::TEXT AS resource
+	FROM usr
+)
+SELECT
+	usr_r.resource,
+	(match.uuid IS NOT NULL)::boolean AS matched,
+	COALESCE(match.uuid, '00000000-0000-0000-0000-000000000000'::uuid) AS policy_uuid,
+	COALESCE(match.group_uuid, '00000000-0000-0000-0000-000000000000'::uuid) AS group_uuid,
+	COALESCE(match.priority, -1)::integer AS priority,
+	COALESCE(match.effect, 'deny'::policy_effect) AS effect,
+	COALESCE(match.action, usr_r.action) AS action,
+	COALESCE(match.resource, '') AS policy_resource,
+	COALESCE(match.effect = 'allow', false)::boolean AS access
+FROM usr_r
+LEFT JOIN LATERAL (
+	SELECT
+		group_policies.uuid,
+		group_policies.group_uuid,
+		group_policies.priority,
+		group_policies.effect,
+		group_policies.action,
+		group_policies.resource
+	FROM user_groups
+	INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+	WHERE user_groups.user_uuid = usr_r.uuid
+	AND group_policies.action = usr_r.action
+	AND usr_r.resource LIKE group_policies.resource
+	ORDER BY group_policies.priority ASC,
+		CASE WHEN group_policies.effect = 'deny' THEN 0 ELSE 1 END ASC
+	LIMIT 1
+) AS match ON true
+`
+
+type ExplainUserTokenAccessManyParams struct {
+	Token     []byte
+	Action    PolicyAction
+	Resources []string
+}
+
+type ExplainUserTokenAccessManyRow struct {
+	Resource       string
+	Matched        bool
+	PolicyUuid     uuid.UUID
+	GroupUuid      uuid.UUID
+	Priority       int32
+	Effect         PolicyEffect
+	Action         PolicyAction
+	PolicyResource string
+	Access         bool
+}
+
+func (q *Queries) ExplainUserTokenAccessMany(ctx context.Context, arg ExplainUserTokenAccessManyParams) ([]ExplainUserTokenAccessManyRow, error) {
+	rows, err := q.query(ctx, q.explainUserTokenAccessManyStmt, explainUserTokenAccessMany, arg.Token, arg.Action, pq.Array(arg.Resources))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExplainUserTokenAccessManyRow{}
+	for rows.Next() {
+		var i ExplainUserTokenAccessManyRow
+		if err := rows.Scan(
+			&i.Resource,
+			&i.Matched,
+			&i.PolicyUuid,
+			&i.GroupUuid,
+			&i.Priority,
+			&i.Effect,
+			&i.Action,
+			&i.PolicyResource,
+			&i.Access,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

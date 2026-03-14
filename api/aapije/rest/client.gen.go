@@ -179,6 +179,9 @@ type ClientInterface interface {
 
 	AddPolicy(ctx context.Context, body AddPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ExplainPolicyDecision request
+	ExplainPolicyDecision(ctx context.Context, params *ExplainPolicyDecisionParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DeletePolicyByUuid request
 	DeletePolicyByUuid(ctx context.Context, uuid UuidParam, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -692,6 +695,18 @@ func (c *Client) AddPolicyWithBody(ctx context.Context, contentType string, body
 
 func (c *Client) AddPolicy(ctx context.Context, body AddPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAddPolicyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ExplainPolicyDecision(ctx context.Context, params *ExplainPolicyDecisionParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExplainPolicyDecisionRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2666,6 +2681,63 @@ func NewAddPolicyRequestWithBody(server string, contentType string, body io.Read
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewExplainPolicyDecisionRequest generates requests for ExplainPolicyDecision
+func NewExplainPolicyDecisionRequest(server string, params *ExplainPolicyDecisionParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v2/policies/explain")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "action", params.Action, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "resource", params.Resource, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -4902,6 +4974,9 @@ type ClientWithResponsesInterface interface {
 
 	AddPolicyWithResponse(ctx context.Context, body AddPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*AddPolicyResponse, error)
 
+	// ExplainPolicyDecisionWithResponse request
+	ExplainPolicyDecisionWithResponse(ctx context.Context, params *ExplainPolicyDecisionParams, reqEditors ...RequestEditorFn) (*ExplainPolicyDecisionResponse, error)
+
 	// DeletePolicyByUuidWithResponse request
 	DeletePolicyByUuidWithResponse(ctx context.Context, uuid UuidParam, reqEditors ...RequestEditorFn) (*DeletePolicyByUuidResponse, error)
 
@@ -5574,6 +5649,28 @@ func (r AddPolicyResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r AddPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ExplainPolicyDecisionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AuthorizationDecision
+}
+
+// Status returns HTTPResponse.Status
+func (r ExplainPolicyDecisionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ExplainPolicyDecisionResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -6756,6 +6853,15 @@ func (c *ClientWithResponses) AddPolicyWithResponse(ctx context.Context, body Ad
 	return ParseAddPolicyResponse(rsp)
 }
 
+// ExplainPolicyDecisionWithResponse request returning *ExplainPolicyDecisionResponse
+func (c *ClientWithResponses) ExplainPolicyDecisionWithResponse(ctx context.Context, params *ExplainPolicyDecisionParams, reqEditors ...RequestEditorFn) (*ExplainPolicyDecisionResponse, error) {
+	rsp, err := c.ExplainPolicyDecision(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseExplainPolicyDecisionResponse(rsp)
+}
+
 // DeletePolicyByUuidWithResponse request returning *DeletePolicyByUuidResponse
 func (c *ClientWithResponses) DeletePolicyByUuidWithResponse(ctx context.Context, uuid UuidParam, reqEditors ...RequestEditorFn) (*DeletePolicyByUuidResponse, error) {
 	rsp, err := c.DeletePolicyByUuid(ctx, uuid, reqEditors...)
@@ -7799,6 +7905,32 @@ func ParseAddPolicyResponse(rsp *http.Response) (*AddPolicyResponse, error) {
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseExplainPolicyDecisionResponse parses an HTTP response from a ExplainPolicyDecisionWithResponse call
+func ParseExplainPolicyDecisionResponse(rsp *http.Response) (*ExplainPolicyDecisionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ExplainPolicyDecisionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AuthorizationDecision
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 

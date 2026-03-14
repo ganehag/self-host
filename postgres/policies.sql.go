@@ -83,48 +83,44 @@ const findPolicies = `-- name: FindPolicies :many
 WITH usr AS (
 	SELECT user_tokens.user_uuid AS uuid
 	FROM user_tokens
-	WHERE user_tokens.token_hash = sha256($1)
+	WHERE user_tokens.token_hash = sha256($3)
 	LIMIT 1
 ), f_group_policies AS (
 	SELECT uuid, group_uuid, priority, effect, action, resource FROM group_policies
 	WHERE
-		$2::uuid[] IS NULL
+		$4::uuid[] IS NULL
 	OR
-		group_policies.group_uuid = ANY($2::uuid[])
-), permitted_policies AS (
-	SELECT uuid, group_uuid, priority, effect, action, resource
-	FROM f_group_policies
-	WHERE EXISTS (
-		SELECT 1
-		FROM usr
-		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
-		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
-		WHERE group_policies.action = 'read'
-		AND group_policies.effect = 'allow'
-		AND ('policies/'||f_group_policies.uuid) LIKE group_policies.resource
-	)
-	AND NOT EXISTS (
-		SELECT 1
-		FROM usr
-		INNER JOIN user_groups ON user_groups.user_uuid = usr.uuid
-		INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
-		WHERE group_policies.action = 'read'
-		AND group_policies.effect = 'deny'
-		AND ('policies/'||f_group_policies.uuid) LIKE group_policies.resource
-	)
-	ORDER BY resource DESC, effect ASC, action DESC, priority ASC
-	LIMIT $4::BIGINT
-	OFFSET $3::BIGINT
+		group_policies.group_uuid = ANY($4::uuid[])
 )
-SELECT uuid, group_uuid, priority, effect, action, resource
-FROM permitted_policies
+SELECT f_group_policies.uuid, f_group_policies.group_uuid, f_group_policies.priority, f_group_policies.effect, f_group_policies.action, f_group_policies.resource
+FROM usr
+INNER JOIN f_group_policies ON true
+LEFT JOIN LATERAL (
+	SELECT group_policies.effect
+	FROM user_groups
+	INNER JOIN group_policies ON group_policies.group_uuid = user_groups.group_uuid
+	WHERE user_groups.user_uuid = usr.uuid
+	AND group_policies.action = 'read'
+	AND ('policies/' || f_group_policies.uuid) LIKE group_policies.resource
+	ORDER BY group_policies.priority ASC,
+		CASE WHEN group_policies.effect = 'deny' THEN 0 ELSE 1 END ASC
+	LIMIT 1
+) AS match ON true
+WHERE COALESCE(match.effect = 'allow', false)
+ORDER BY
+	f_group_policies.resource DESC,
+	f_group_policies.effect ASC,
+	f_group_policies.action DESC,
+	f_group_policies.priority ASC
+LIMIT $2::BIGINT
+OFFSET $1::BIGINT
 `
 
 type FindPoliciesParams struct {
-	Token      []byte
-	GroupUuids []uuid.UUID
 	ArgOffset  int64
 	ArgLimit   int64
+	Token      []byte
+	GroupUuids []uuid.UUID
 }
 
 type FindPoliciesRow struct {
@@ -138,10 +134,10 @@ type FindPoliciesRow struct {
 
 func (q *Queries) FindPolicies(ctx context.Context, arg FindPoliciesParams) ([]FindPoliciesRow, error) {
 	rows, err := q.query(ctx, q.findPoliciesStmt, findPolicies,
-		arg.Token,
-		pq.Array(arg.GroupUuids),
 		arg.ArgOffset,
 		arg.ArgLimit,
+		arg.Token,
+		pq.Array(arg.GroupUuids),
 	)
 	if err != nil {
 		return nil, err

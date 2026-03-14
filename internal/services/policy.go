@@ -1,4 +1,4 @@
-// Copyright 2021 The Self-host Authors. All rights reserved.
+// Copyright 2021-2026 The Self-host Authors. All rights reserved.
 // Use of this source code is governed by the GPLv3
 // license that can be found in the LICENSE file.
 
@@ -49,6 +49,16 @@ type NewPolicyParams struct {
 
 // Add a new policy
 func (s *PolicyService) Add(ctx context.Context, p NewPolicyParams) (*rest.Policy, error) {
+	if err := s.validatePolicyRule(ctx, s.q, policyRule{
+		GroupUUID: p.GroupUuid,
+		Priority:  p.Priority,
+		Effect:    p.Effect,
+		Action:    p.Action,
+		Resource:  p.Resource,
+	}); err != nil {
+		return nil, err
+	}
+
 	policy, err := s.q.CreatePolicy(ctx, postgres.CreatePolicyParams{
 		GroupUuid: p.GroupUuid,
 		Priority:  p.Priority,
@@ -218,6 +228,41 @@ func (s *PolicyService) Update(ctx context.Context, id uuid.UUID, p UpdatePolicy
 
 	q := s.q.WithTx(tx)
 
+	current, err := q.FindPolicyByUUID(ctx, id)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
+	nextRule := policyRule{
+		ID:        &id,
+		GroupUUID: current.GroupUuid,
+		Priority:  current.Priority,
+		Effect:    string(current.Effect),
+		Action:    string(current.Action),
+		Resource:  current.Resource,
+	}
+	if p.GroupUuid != nil {
+		nextRule.GroupUUID = *p.GroupUuid
+	}
+	if p.Priority != nil {
+		nextRule.Priority = int32(*p.Priority)
+	}
+	if p.Effect != nil {
+		nextRule.Effect = *p.Effect
+	}
+	if p.Action != nil {
+		nextRule.Action = *p.Action
+	}
+	if p.Resource != nil {
+		nextRule.Resource = *p.Resource
+	}
+
+	if err := s.validatePolicyRule(ctx, q, nextRule); err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
 	if p.GroupUuid != nil {
 		c, err := q.SetPolicyGroup(ctx, postgres.SetPolicyGroupParams{
 			Uuid:      id,
@@ -285,7 +330,9 @@ func (s *PolicyService) Update(ctx context.Context, id uuid.UUID, p UpdatePolicy
 		}
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 
 	return count, nil
 }

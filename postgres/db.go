@@ -141,6 +141,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.existsUserStmt, err = db.PrepareContext(ctx, existsUser); err != nil {
 		return nil, fmt.Errorf("error preparing query ExistsUser: %w", err)
 	}
+	if q.explainUserTokenAccessManyStmt, err = db.PrepareContext(ctx, explainUserTokenAccessMany); err != nil {
+		return nil, fmt.Errorf("error preparing query ExplainUserTokenAccessMany: %w", err)
+	}
 	if q.findAlertByUUIDStmt, err = db.PrepareContext(ctx, findAlertByUUID); err != nil {
 		return nil, fmt.Errorf("error preparing query FindAlertByUUID: %w", err)
 	}
@@ -597,6 +600,11 @@ func (q *Queries) Close() error {
 	if q.existsUserStmt != nil {
 		if cerr := q.existsUserStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing existsUserStmt: %w", cerr)
+		}
+	}
+	if q.explainUserTokenAccessManyStmt != nil {
+		if cerr := q.explainUserTokenAccessManyStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing explainUserTokenAccessManyStmt: %w", cerr)
 		}
 	}
 	if q.findAlertByUUIDStmt != nil {
@@ -1107,6 +1115,7 @@ type Queries struct {
 	existsThingStmt                    *sql.Stmt
 	existsTimeseriesStmt               *sql.Stmt
 	existsUserStmt                     *sql.Stmt
+	explainUserTokenAccessManyStmt     *sql.Stmt
 	findAlertByUUIDStmt                *sql.Stmt
 	findAlertsStmt                     *sql.Stmt
 	findAllModulesStmt                 *sql.Stmt
@@ -1238,6 +1247,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		existsThingStmt:                    q.existsThingStmt,
 		existsTimeseriesStmt:               q.existsTimeseriesStmt,
 		existsUserStmt:                     q.existsUserStmt,
+		explainUserTokenAccessManyStmt:     q.explainUserTokenAccessManyStmt,
 		findAlertByUUIDStmt:                q.findAlertByUUIDStmt,
 		findAlertsStmt:                     q.findAlertsStmt,
 		findAllModulesStmt:                 q.findAllModulesStmt,
