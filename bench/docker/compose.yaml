@@ -13,6 +13,18 @@ services:
       timeout: 3s
       retries: 20
 
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: selfhost-bench-mosquitto
+    ports:
+      - "${MOSQUITTO_PORT:-1883}:1883"
+
+  emqx:
+    image: emqx/emqx:latest
+    container_name: selfhost-bench-emqx
+    ports:
+      - "${EMQX_PORT:-1886}:1883"
+
   aapije:
     build:
       context: ../..
