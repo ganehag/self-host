@@ -2032,14 +2032,16 @@ func NewAssembleDatasetPartsByKeyRequest(server string, uuid UuidParam, params *
 
 	if params != nil {
 
-		var headerParam0 string
+		if params.ContentMD5 != nil {
+			var headerParam0 string
 
-		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Content-MD5", params.ContentMD5, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
-		if err != nil {
-			return nil, err
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Content-MD5", *params.ContentMD5, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Content-MD5", headerParam0)
 		}
-
-		req.Header.Set("Content-MD5", headerParam0)
 
 	}
 
@@ -2161,14 +2163,16 @@ func NewUploadDatasetContentByKeyRequest(server string, uuid UuidParam, params *
 
 	if params != nil {
 
-		var headerParam0 string
+		if params.ContentMD5 != nil {
+			var headerParam0 string
 
-		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Content-MD5", params.ContentMD5, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
-		if err != nil {
-			return nil, err
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Content-MD5", *params.ContentMD5, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Content-MD5", headerParam0)
 		}
-
-		req.Header.Set("Content-MD5", headerParam0)
 
 	}
 

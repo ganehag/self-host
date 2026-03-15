@@ -333,8 +333,8 @@ components:
     contentMD5HeaderParam:
       in: header
       name: Content-MD5
-      required: true
-      description: MD5 checksum of the payload or assembled object, represented as a 32-character hex string.
+      required: false
+      description: Optional MD5 checksum of the payload or assembled object, represented as a 32-character hex string.
       schema:
         $ref: '#/components/schemas/MD5Hex'
     partNumberParam:

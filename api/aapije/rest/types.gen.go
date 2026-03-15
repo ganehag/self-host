@@ -1787,8 +1787,8 @@ type AssembleDatasetPartsByKeyParams struct {
 	// UploadId Active multipart upload session identifier.
 	UploadId UploadIdParam `form:"uploadId" json:"uploadId"`
 
-	// ContentMD5 MD5 checksum of the payload or assembled object, represented as a 32-character hex string.
-	ContentMD5 ContentMD5HeaderParam `json:"Content-MD5"`
+	// ContentMD5 Optional MD5 checksum of the payload or assembled object, represented as a 32-character hex string.
+	ContentMD5 *ContentMD5HeaderParam `json:"Content-MD5,omitempty"`
 }
 
 // ListDatasetPartsByKeyParams defines parameters for ListDatasetPartsByKey.
@@ -1805,8 +1805,8 @@ type UploadDatasetContentByKeyParams struct {
 	// UploadId Active multipart upload session identifier.
 	UploadId UploadIdParam `form:"uploadId" json:"uploadId"`
 
-	// ContentMD5 MD5 checksum of the payload or assembled object, represented as a 32-character hex string.
-	ContentMD5 ContentMD5HeaderParam `json:"Content-MD5"`
+	// ContentMD5 Optional MD5 checksum of the payload or assembled object, represented as a 32-character hex string.
+	ContentMD5 *ContentMD5HeaderParam `json:"Content-MD5,omitempty"`
 }
 
 // GetRawDatasetByUuidParams defines parameters for GetRawDatasetByUuid.

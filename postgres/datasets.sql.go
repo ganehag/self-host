@@ -584,12 +584,21 @@ SET
 		WHEN $5::boolean THEN NULLIF($11::text, '')
 		ELSE storage_key
 	END,
+	updated = CASE
+		WHEN $1::boolean
+			OR $3::boolean
+			OR $5::boolean
+			OR $12::boolean
+			OR $13::boolean
+		THEN NOW()
+		ELSE updated
+	END,
 	belongs_to = CASE
-		WHEN $12::boolean THEN $13
+		WHEN $12::boolean THEN $14
 		ELSE belongs_to
 	END,
 	tags = CASE
-		WHEN $14::boolean THEN $15
+		WHEN $13::boolean THEN $15
 		ELSE tags
 	END
 WHERE datasets.uuid = $16
@@ -608,8 +617,8 @@ type UpdateDatasetByUUIDParams struct {
 	StorageBucket  string
 	StorageKey     string
 	SetThingUuid   bool
-	ThingUuid      uuid.NullUUID
 	SetTags        bool
+	ThingUuid      uuid.NullUUID
 	Tags           []string
 	Uuid           uuid.UUID
 }
@@ -628,8 +637,8 @@ func (q *Queries) UpdateDatasetByUUID(ctx context.Context, arg UpdateDatasetByUU
 		arg.StorageBucket,
 		arg.StorageKey,
 		arg.SetThingUuid,
-		arg.ThingUuid,
 		arg.SetTags,
+		arg.ThingUuid,
 		pq.Array(arg.Tags),
 		arg.Uuid,
 	)
