@@ -1,127 +1,176 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/self-host/self-host/main/docs/assets/logo.svg" width="200" height="200">
-    <br>
-    <br>
-    <quote>&ldquo;If you want something done, do it yourself.&rdquo;</quote>
-    <br>
-    <i>- A lot of people</i>
+  <img src="https://raw.githubusercontent.com/self-host/self-host/main/docs/assets/logo.svg" width="160" height="160" alt="Self-host logo">
 </p>
-
----
-
-[![GPLv3 License](https://img.shields.io/badge/license-GPLv3-blue)](https://github.com/self-host/self-host/blob/master/LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/self-host/self-host)](https://goreportcard.com/report/github.com/self-host/self-host)
-[![Aapije](https://github.com/self-host/self-host/actions/workflows/aapije.yaml/badge.svg)](https://github.com/self-host/self-host/actions/workflows/aapije.yaml)
-[![Juvuln](https://github.com/self-host/self-host/actions/workflows/juvuln.yml/badge.svg)](https://github.com/self-host/self-host/actions/workflows/juvuln.yml)
-[![Malgomaj](https://github.com/self-host/self-host/actions/workflows/malgomaj.yml/badge.svg)](https://github.com/self-host/self-host/actions/workflows/malgomaj.yml)
 
 # Self-host
 
-Roll your own self-hosted API compatible server and host the data yourself.
+Self-host is a self-hosted time-series storage, ingestion, query, and automation platform built around the Self-host API.
 
-Made in Sweden :sweden: by skilled artisan software engineers.
+The project exists so an organization can run the platform itself, inspect the code, modify it, and keep full control over the API, the data store, the ingestion path, and the automation logic. The system is open source, so the operator is not dependent on a hosted service or a closed implementation.
 
-<img src="https://raw.githubusercontent.com/self-host/self-host/main/docs/assets/swedish_software.png" width="128" height="128" alt="Putting the SE in Software Engineering">
+It is intended for deployments where these points matter:
+- control over infrastructure, data location, and network boundaries
+- a stable API surface that can be operated internally
+- a platform that can scale by adding more API instances, workers, databases, or storage backends
+- built-in scripting support for automation tasks such as data transformation, scheduled jobs, and worker-driven processing
+- the ability to integrate time series, datasets, alerts, and scripted logic in one system
 
-# The purpose of this project
+The project includes:
+- `aapije`: the public REST API server
+- `juvuln`: the program manager
+- `malgomaj`: the program worker
+- `selfctl`: the operator CLI
+- benchmark and local test harnesses for API and ingestion performance
 
-To provide clients and potential clients with an alternative platform where they are responsible for hosting the API server and the data store.
+## What It Can Do
 
+- Ingest, store, and query time-series data in infrastructure you operate yourself
+- Support dataset-backed workflows alongside time-series workloads
+- Run built-in scripted automation and transformation logic through the manager/worker architecture
+- Store metadata in PostgreSQL and optionally keep dataset payloads in an S3-compatible object store
+- Manage users, groups, policies, datasets, things, and time series through the API and `selfctl`
+- Ingest and benchmark time-series workloads, including MQTT-based ingestion paths
+- Validate and serve OpenAPI-described public and internal services
 
-# Features
+## Project Scope
 
-- Small infrastructure.
-    + The only dependency is on PostgreSQL.
-- Compiled binaries (Go).
-- Designed to scale with demand.
-    + You can host domains on separate PostgreSQL machines.
-    + You can scale the Self-host API to as many instances as you require.
-    + The Program Manager and its Workers can be scaled as needed.
-- Can be hosted in your environment.
-    + No requirement on any specific cloud solution.
-- It is Free software.
-    + License is GPLv3.
-    + The API specification is open, and you can implement it if you don't want to use the existing implementation.
+Self-host is not just a single binary. It is a platform composed of API, background execution, storage, and operator tooling.
 
+At a high level, it is meant to be:
+- self-hosted first
+- PostgreSQL-centered
+- centered on time-series ingestion, storage, and query workloads
+- scriptable for automation and transformation tasks
+- explicit about API contracts
+- suitable for both local development and production deployment
+- benchmarkable and inspectable under load
 
-# Overview
+## Architecture
 
-A typical deployment scenario would look something like this;
+A typical deployment consists of:
+- one or more `aapije` instances exposing the public API
+- one `juvuln` instance coordinating program execution
+- one or more `malgomaj` workers executing program workloads
+- one or more PostgreSQL databases hosting Self-host domains
+- optionally an HTTP reverse proxy in front of `aapije`
+- optionally an S3-compatible object store for dataset payloads
 
-![Overview][fig1]
+![Overview](https://raw.githubusercontent.com/self-host/self-host/main/docs/assets/overview.svg)
 
-- One (or more) instances of the `Self-host API server`. This server provides the public REST API and is the only exposed surface from the internet.
-- One instance of the `Program Manager`. This server manages all programs and schedules them.
-- One (or more) instances of the `Program Worker`. This server accepts work from the `Program Manager`.
-- One (or more) DBMS to host all Self-host databases (Domains). PostgreSQL 12+ with one (or more) Self-host `Domains`.
+## Repository Layout
 
-The `API server` can accept client request from either the internet or from the intranet. The `Domain databases` backs all `API server` requests.
+- `api`: OpenAPI interfaces and generated server/client types
+- `bench`: local benchmark harnesses
+- `cmd`: binaries such as `aapije`, `juvuln`, `malgomaj`, `selfctl`, `insamlare`
+- `docs`: project and deployment documentation
+- `internal`: service implementations and shared internal packages
+- `middleware`: HTTP middleware
+- `postgres`: migrations, generated queries, and PostgreSQL integration
+- `test`: local integration test stacks, including SeaweedFS-backed dataset testing
 
-The `Program Worker` can execute requests to external services on the internet or internal services, for example, the `API server`.
+## Quick Start
 
-An `HTTP Proxy` may be used in front of the `API server` depending on the deployment scenario.
+For a local API environment:
 
+```bash
+./bench/run-local.sh
+```
 
-# Project structure
+That brings up PostgreSQL and `aapije`, applies migrations, seeds benchmark data, and leaves the API available on:
 
-- `api`:
-    + `aapije`: REST API interface for the Self-host public facing API server.
-    + `juvuln`: REST API interface for the internal API of the Program Manager.
-    + `malgomaj`: REST API interface for the internal API of the Program Worker.
-- `cmd`:
-    + `selfctl`: Self Control; self-host CLI program.
-    + `aapije`: Aapije is the Self-host public facing API server.
-    + `juvuln`: Juvuln is the Self-host Program Manager.
-    + `malgomaj`: Malgomaj is the Self-host Program Worker.
-- `docs`: Documentation
-- `internal`:
-    + `services`: Handlers for interfaces to the PostgreSQL backend.
-    + `errors`: Custom errors.
-- `middleware`: Middleware used by HTTP Servers.
-- `postgres`:
-    + `migrations`: Database schema.
-    + `queries`: Database queries.
+```text
+http://127.0.0.1:8080
+```
 
+The API reference is available at:
 
-# Five to fifteen-minute deployment
+```text
+http://127.0.0.1:8080/reference
+```
 
-Skills required;
+For a local SeaweedFS-backed dataset environment:
 
-- Good knowledge of Docker.
-- Some knowledge of PostgreSQL.
-- Some knowledge of GNU+Linux or Unix environments in general.
+```bash
+./test/seaweedfs/run-local.sh
+```
 
-Hardware and software required;
+For a local MQTT ingestion benchmark:
 
-- Computer with Docker installed.
+```bash
+./bench/run-insamlare-local.sh
+```
 
-[Five to fifteen-minute deployment](https://github.com/self-host/self-host/blob/main/docs/test_deployment.md)
+## CLI
 
+`selfctl` is the main operator CLI. It supports:
+- dataset create, update, upload, download, and delete
+- user, group, and policy administration
+- thing and timeseries administration
+- local config management
+- raw API requests
 
-# Documentation
+Build it with:
 
-- [Glossary](https://github.com/self-host/self-host/blob/main/docs/glossary.md)
-- [Tools of the trade](https://github.com/self-host/self-host/blob/main/docs/tools_of_the_trade.md)
-- [Design](https://github.com/self-host/self-host/blob/main/docs/design.md)
-    + [Authentication](https://github.com/self-host/self-host/blob/main/docs/authentication.md)
-    + [Access control](https://github.com/self-host/self-host/blob/main/docs/access_control.md)
-    + [Data partitioning](https://github.com/self-host/self-host/blob/main/docs/data_partitioning.md)
-    + [Rate control](https://github.com/self-host/self-host/blob/main/docs/rate_control.md)
-    + [Program Manager and Workers](https://github.com/self-host/self-host/blob/main/docs/program_manager_worker.md)
-    + [Unit handling](https://github.com/self-host/self-host/blob/main/docs/unit_handling.md)
-    + [Exernal services](https://github.com/self-host/self-host/blob/main/docs/external_services.md)
-    + [Alerts](https://github.com/self-host/self-host/blob/main/docs/alerts.md)
-    + [Database ERD](https://github.com/self-host/self-host/blob/main/docs/assets/database_erd.png)
-- [Benchmark](https://github.com/self-host/self-host/blob/main/docs/benchmark_overview.md)
-- [Benchmark harness](https://github.com/self-host/self-host/blob/main/docs/benchmark_harness.md)
-- [Public-facing API specification](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/self-host/self-host/main/api/aapije/rest/openapiv3.yaml)
-- [Notes on deploying to production](https://github.com/self-host/self-host/blob/main/docs/production_deployment.md)
-    + [Docker](https://github.com/self-host/self-host/blob/main/docs/docker_deployment.md)
-    + [Kubernetes](https://github.com/self-host/self-host/blob/main/docs/k8s_deployment.md)
+```bash
+go build ./cmd/selfctl
+```
 
+Documentation:
+- [selfctl guide](docs/selfctl.md)
 
-:hearts: Like this project? Want to improve it but unsure where to begin? Check out the [issue tracker](https://github.com/self-host/self-host/issues).
+## Documentation
 
+Project and deployment documentation:
+- [Test deployment](docs/test_deployment.md)
+- [Production deployment](docs/production_deployment.md)
+- [Docker deployment](docs/docker_deployment.md)
+- [Kubernetes deployment](docs/k8s_deployment.md)
+- [Authentication](docs/authentication.md)
+- [Access control](docs/access_control.md)
+- [Data partitioning](docs/data_partitioning.md)
+- [Program manager and workers](docs/program_manager_worker.md)
+- [External services](docs/external_services.md)
+- [Rate control](docs/rate_control.md)
+- [Unit handling](docs/unit_handling.md)
+- [Alerts](docs/alerts.md)
+- [Design](docs/design.md)
+- [Glossary](docs/glossary.md)
 
-[vimpel]: https://raw.githubusercontent.com/self-host/self-host/main/docs/assets/vimpel.svg "Vimpel"
-[fig1]: https://raw.githubusercontent.com/self-host/self-host/main/docs/assets/overview.svg "Overview"
+Benchmarking and local testing:
+- [Benchmark overview](docs/benchmark_overview.md)
+- [Benchmark harness](docs/benchmark_harness.md)
+- [SeaweedFS dataset testing](docs/dataset_seaweedfs_testing.md)
+- [bench/README](bench/README.md)
+
+## API Specification
+
+The checked-in public OpenAPI specification is:
+
+- [api/aapije/rest/openapiv3.yaml](api/aapije/rest/openapiv3.yaml)
+
+The running `aapije` service also serves the generated specification at:
+
+```text
+/openapi3.json
+```
+
+and renders the interactive reference UI at:
+
+```text
+/reference
+```
+
+## Requirements
+
+At minimum:
+- Go for local builds
+- PostgreSQL for the main platform
+- Docker for the supplied local harnesses
+
+Optional:
+- an S3-compatible object store for dataset payloads
+- an MQTT broker for ingestion testing
+
+## License
+
+Self-host is licensed under GPLv3. See [LICENSE](LICENSE).
