@@ -5,10 +5,7 @@
 package aapije
 
 import (
-	"encoding/json"
 	"net/http"
-
-	"github.com/google/uuid"
 
 	"github.com/self-host/self-host/api/aapije/rest"
 	ie "github.com/self-host/self-host/internal/errors"
@@ -19,7 +16,7 @@ import (
 func (ra *RestApi) AddThing(w http.ResponseWriter, r *http.Request) {
 	// We expect a NewThing object in the request body.
 	var n rest.NewThing
-	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
+	if err := ra.decodeJSONBody(w, r, &n); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -54,8 +51,7 @@ func (ra *RestApi) AddThing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(thing)
+	writeJSON(w, http.StatusCreated, thing)
 }
 
 // FindThings lists all things
@@ -110,17 +106,12 @@ func (ra *RestApi) FindThings(w http.ResponseWriter, r *http.Request, p rest.Fin
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(things)
+	writeJSON(w, http.StatusOK, things)
 }
 
 // FindThingByUuid returns a specific thing by its UUID
 func (ra *RestApi) FindThingByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	thingUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	thingUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -135,17 +126,12 @@ func (ra *RestApi) FindThingByUuid(w http.ResponseWriter, r *http.Request, id re
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(things)
+	writeJSON(w, http.StatusOK, things)
 }
 
 // FindTimeSeriesForThing lists all time series belonging to a thing
 func (ra *RestApi) FindTimeSeriesForThing(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	thingUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	thingUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -161,17 +147,12 @@ func (ra *RestApi) FindTimeSeriesForThing(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(timeseries)
+	writeJSON(w, http.StatusOK, timeseries)
 }
 
 // FindDatasetsForThing Find all datasets belonging to a thing
 func (ra *RestApi) FindDatasetsForThing(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	thingUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	thingUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -179,24 +160,23 @@ func (ra *RestApi) FindDatasetsForThing(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	srv := services.NewDatasetService(db)
+	srv, err := services.NewDatasetService(db)
+	if err != nil {
+		ie.SendHTTPError(w, ie.ErrorUndefined)
+		return
+	}
 	datasets, err := srv.FindByThing(r.Context(), thingUUID)
 	if err != nil {
 		ie.SendHTTPError(w, ie.ParseDBError(err))
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(datasets)
+	writeJSON(w, http.StatusOK, datasets)
 }
 
 // UpdateThingByUuid updates a specific thing by its UUID
 func (ra *RestApi) UpdateThingByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	thingUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	thingUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -208,7 +188,7 @@ func (ra *RestApi) UpdateThingByUuid(w http.ResponseWriter, r *http.Request, id 
 
 	// We expect a UpdateThing object in the request body.
 	var obj rest.UpdateThing
-	if err := json.NewDecoder(r.Body).Decode(&obj); err != nil {
+	if err := ra.decodeJSONBody(w, r, &obj); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -235,11 +215,7 @@ func (ra *RestApi) UpdateThingByUuid(w http.ResponseWriter, r *http.Request, id 
 
 // DeleteThingByUuid deletes a specific thing by its UUID
 func (ra *RestApi) DeleteThingByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	thingUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	thingUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {

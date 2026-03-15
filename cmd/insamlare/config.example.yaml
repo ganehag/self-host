@@ -1,0 +1,48 @@
+mqtt:
+  broker: tcp://127.0.0.1:1883
+  client_id: selfhost-insamlare
+  qos: 1
+  clean_session: false
+
+postgres:
+  dsn: postgres://postgres:secret@127.0.0.1:5432/selfhost?sslmode=disable
+  created_by_uuid: 00000000-0000-1000-8000-000000000000
+
+ingest:
+  batch_size: 5000
+  flush_interval: 2s
+  workers: 4
+  queue_size: 10000
+
+load_log:
+  interval: 1m
+
+transform:
+  timeout: 250ms
+
+routes:
+  - name: boiler_room_temp
+    topic: sensors/boiler/temperature
+    timeseries_uuid: 47daa6eb-bd1c-49de-9782-1e9422a206f5
+    payload_format: json
+    value_key: value
+    timestamp_key: ts
+    timestamp_format: rfc3339
+
+  - name: scripted_modbus_frame
+    topic: factory/line1/#
+    script_path: ./line1_transform.tengo
+
+  - name: dynamic_json_value
+    topic_regex: ^sensors/([^/]+)/([^/]+)$
+    timeseries_uuid: $1
+    payload_format: json
+    value_key: $2
+    timestamp_key: ts
+
+  - name: explicit_subscription_for_complex_regex
+    topic_regex: ^factory/(line[0-9]+)/modbus/(register_[0-9]+)$
+    subscription_topic: factory/+/modbus/+
+    timeseries_uuid: $1
+    payload_format: json
+    value_key: $2

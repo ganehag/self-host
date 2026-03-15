@@ -83,7 +83,7 @@ func (svc *DatasetUploadService) CreateUpload(ctx context.Context, datasetUUID u
 	}
 
 	if svc.opt.Store != nil {
-		ref := svc.opt.Storage.UploadRef(datasetUUID.String(), uploadID)
+		ref := svc.opt.Storage.ContentRef(datasetUUID.String())
 		backendUploadID, err := svc.opt.Store.CreateMultipartUpload(ctx, ref, ds.Format)
 		if err != nil {
 			return nil, err
@@ -107,6 +107,8 @@ func (svc *DatasetUploadService) CreateUpload(ctx context.Context, datasetUUID u
 				Bucket:  params.StorageBucket,
 				Key:     params.StorageKey,
 			}, params.BackendUploadID)
+		} else {
+			_ = os.RemoveAll(svc.uploadDir(uploadID))
 		}
 		return nil, err
 	}
@@ -167,6 +169,9 @@ func (svc *DatasetUploadService) UploadPart(ctx context.Context, datasetUUID uui
 		ChecksumMd5: actualMD5,
 		Etag:        "",
 	})
+	if err != nil {
+		_ = os.Remove(partPath)
+	}
 	return err
 }
 

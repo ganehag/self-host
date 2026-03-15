@@ -59,9 +59,28 @@ func (f *fakeS3Server) storageOptions() DatasetStorageOptions {
 	}
 }
 
+func TestNewDatasetServiceReturnsStoreConfigurationErrors(t *testing.T) {
+	_, err := NewDatasetService(db, DatasetStorageOptions{
+		Backend: DatasetStorageBackendS3,
+		Domain:  "test",
+		S3: &DatasetS3Options{
+			Region:          "us-east-1",
+			AccessKeyID:     "test",
+			SecretAccessKey: "test",
+			ForcePathStyle:  true,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected dataset service construction to fail for invalid S3 configuration")
+	}
+}
+
 func TestDatasetS3ContentRoundTrip(t *testing.T) {
 	s3srv := newFakeS3Server(t)
-	svc := NewDatasetService(db, s3srv.storageOptions())
+	svc, err := NewDatasetService(db, s3srv.storageOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	content := []byte(`{"hello":"world"}`)
 	ds, err := svc.AddDataset(context.Background(), &AddDatasetParams{
@@ -85,6 +104,9 @@ func TestDatasetS3ContentRoundTrip(t *testing.T) {
 	if !row.StorageBucket.Valid || !row.StorageKey.Valid {
 		t.Fatal("expected dataset object reference to be stored")
 	}
+	if want := s3srv.storageOptions().ContentRef(dsID.String()).Key; row.StorageKey.String != want {
+		t.Fatalf("expected dataset content key %q, got %q", want, row.StorageKey.String)
+	}
 
 	file, err := svc.GetDatasetContentByUuid(context.Background(), dsID)
 	if err != nil {
@@ -107,7 +129,10 @@ func TestDatasetS3ContentRoundTrip(t *testing.T) {
 func TestDatasetS3MultipartAssemble(t *testing.T) {
 	s3srv := newFakeS3Server(t)
 	storageOpt := s3srv.storageOptions()
-	dsSvc := NewDatasetService(db, storageOpt)
+	dsSvc, err := NewDatasetService(db, storageOpt)
+	if err != nil {
+		t.Fatal(err)
+	}
 	store, err := NewDatasetObjectStore(context.Background(), storageOpt)
 	if err != nil {
 		t.Fatal(err)
@@ -165,6 +190,17 @@ func TestDatasetS3MultipartAssemble(t *testing.T) {
 	want := []byte(part1 + part2)
 	if !bytes.Equal(got, want) {
 		t.Fatalf("assembled dataset mismatch: got %d bytes want %d", len(got), len(want))
+	}
+
+	row, err := dsSvc.q.GetDatasetObjectRefByUUID(context.Background(), dsID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wantKey := storageOpt.ContentRef(dsID.String()).Key; nullableSQLString(row.StorageKey) != wantKey {
+		t.Fatalf("expected assembled dataset content key %q, got %q", wantKey, nullableSQLString(row.StorageKey))
+	}
+	if int64(row.Size) != int64(len(want)) {
+		t.Fatalf("expected assembled dataset size %d, got %d", len(want), row.Size)
 	}
 }
 

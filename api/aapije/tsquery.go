@@ -5,7 +5,6 @@
 package aapije
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"github.com/self-host/self-host/api/aapije/rest"
 	ie "github.com/self-host/self-host/internal/errors"
 	"github.com/self-host/self-host/internal/services"
-	"github.com/self-host/self-host/pkg/util"
 	"github.com/spf13/viper"
 )
 
@@ -57,11 +55,7 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 	svc := services.NewTimeseriesService(db)
 	policySvc := services.NewPolicyCheckService(db)
 
-	uuids, err := util.StringSliceToUuidSlice([]string(p.Uuids))
-	if err != nil {
-		ie.SendHTTPError(w, ie.NewBadRequestError(fmt.Errorf("uuids has invalid format")))
-		return
-	}
+	uuids := uuidSliceFromParams(p.Uuids)
 	uuids = uniqueUUIDs(uuids)
 
 	maxSeries := viper.GetInt("timeseries_queries.max_series")
@@ -118,8 +112,7 @@ func (ra *RestApi) FindTsdataByQuery(w http.ResponseWriter, r *http.Request, p r
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(data)
+	writeJSON(w, http.StatusOK, data)
 	return
 }
 

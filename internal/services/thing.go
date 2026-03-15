@@ -83,7 +83,9 @@ func (svc *ThingService) AddThing(ctx context.Context, p *AddThingParams) (*rest
 		return nil, err
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 
 	v := &rest.Thing{
 		Uuid:      thing.Uuid.String(),
@@ -229,7 +231,10 @@ func (svc *ThingService) UpdateByUuid(ctx context.Context, p UpdateThingParams) 
 
 	if p.Type != nil {
 		var ns sql.NullString
-		ns.Scan(p.Type)
+		if err := ns.Scan(*p.Type); err != nil {
+			tx.Rollback()
+			return 0, err
+		}
 
 		params := postgres.SetThingTypeByUUIDParams{
 			Uuid: p.Uuid,
@@ -269,7 +274,9 @@ func (svc *ThingService) UpdateByUuid(ctx context.Context, p UpdateThingParams) 
 		count += c
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 
 	return count, nil
 }

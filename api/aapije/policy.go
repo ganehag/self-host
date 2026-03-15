@@ -6,7 +6,6 @@ package aapije
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -14,7 +13,6 @@ import (
 	"github.com/self-host/self-host/api/aapije/rest"
 	ie "github.com/self-host/self-host/internal/errors"
 	"github.com/self-host/self-host/internal/services"
-	"github.com/self-host/self-host/pkg/util"
 )
 
 func authorizePolicyGrant(ctx context.Context, pc *services.PolicyCheckService, token []byte, action, resource string) error {
@@ -32,7 +30,7 @@ func authorizePolicyGrant(ctx context.Context, pc *services.PolicyCheckService, 
 func (ra *RestApi) AddPolicy(w http.ResponseWriter, r *http.Request) {
 	// We expect a NewPolicy object in the request body.
 	var newPolicy rest.NewPolicy
-	if err := json.NewDecoder(r.Body).Decode(&newPolicy); err != nil {
+	if err := ra.decodeJSONBody(w, r, &newPolicy); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -78,8 +76,7 @@ func (ra *RestApi) AddPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(policy)
+	writeJSON(w, http.StatusCreated, policy)
 }
 
 // FindPolicies list all policies
@@ -111,12 +108,7 @@ func (ra *RestApi) FindPolicies(w http.ResponseWriter, r *http.Request, p rest.F
 	}
 
 	if p.GroupUuids != nil {
-		groupUUIDs, err := util.StringSliceToUuidSlice(*p.GroupUuids)
-		if err != nil {
-			ie.SendHTTPError(w, ie.ErrorMalformedRequest)
-			return
-		}
-
+		groupUUIDs := uuidSliceFromParams(*p.GroupUuids)
 		params.GroupUuids = &groupUUIDs
 	}
 
@@ -127,16 +119,11 @@ func (ra *RestApi) FindPolicies(w http.ResponseWriter, r *http.Request, p rest.F
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(policies)
+	writeJSON(w, http.StatusOK, policies)
 }
 
 func (ra *RestApi) FindPolicyByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	policyUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	policyUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -151,8 +138,7 @@ func (ra *RestApi) FindPolicyByUuid(w http.ResponseWriter, r *http.Request, id r
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(policy)
+	writeJSON(w, http.StatusOK, policy)
 }
 
 // ExplainPolicyDecision explains the winning policy decision for the current token.
@@ -202,24 +188,19 @@ func (ra *RestApi) ExplainPolicyDecision(w http.ResponseWriter, r *http.Request,
 		reply.MatchedPattern = &v
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(reply)
+	writeJSON(w, http.StatusOK, reply)
 }
 
 // UpdatePolicyByUuid updates a specific policy by its UUID
 func (ra *RestApi) UpdatePolicyByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
 	// We expect a UpdatePolicy object in the request body.
 	var updatePolicy rest.UpdatePolicy
-	if err := json.NewDecoder(r.Body).Decode(&updatePolicy); err != nil {
+	if err := ra.decodeJSONBody(w, r, &updatePolicy); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
 
-	policyUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	policyUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -286,11 +267,7 @@ func (ra *RestApi) UpdatePolicyByUuid(w http.ResponseWriter, r *http.Request, id
 
 // DeletePolicyByUuid deletes a specific policy by its UUID
 func (ra *RestApi) DeletePolicyByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	policyUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	policyUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {

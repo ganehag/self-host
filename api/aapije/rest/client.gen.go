@@ -225,10 +225,10 @@ type ClientInterface interface {
 	GetProgramCodeRevisions(ctx context.Context, uuid UuidParam, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteProgramCodeRevisions request
-	DeleteProgramCodeRevisions(ctx context.Context, uuid UuidParam, revisionId int, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DeleteProgramCodeRevisions(ctx context.Context, uuid UuidParam, revisionId RevisionIdParam, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SignProgramCodeRevisions request
-	SignProgramCodeRevisions(ctx context.Context, uuid UuidParam, revisionId int, reqEditors ...RequestEditorFn) (*http.Response, error)
+	SignProgramCodeRevisions(ctx context.Context, uuid UuidParam, revisionId RevisionIdParam, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ExecuteProgramWebhook request
 	ExecuteProgramWebhook(ctx context.Context, uuid UuidParam, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -330,7 +330,7 @@ type ClientInterface interface {
 	AddNewTokenToUser(ctx context.Context, uuid UuidParam, body AddNewTokenToUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteTokenForUser request
-	DeleteTokenForUser(ctx context.Context, uuid UuidParam, tokenUuid string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DeleteTokenForUser(ctx context.Context, uuid UuidParam, tokenUuid TokenUUIDParam, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) FindAlerts(ctx context.Context, params *FindAlertsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -897,7 +897,7 @@ func (c *Client) GetProgramCodeRevisions(ctx context.Context, uuid UuidParam, re
 	return c.Client.Do(req)
 }
 
-func (c *Client) DeleteProgramCodeRevisions(ctx context.Context, uuid UuidParam, revisionId int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) DeleteProgramCodeRevisions(ctx context.Context, uuid UuidParam, revisionId RevisionIdParam, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteProgramCodeRevisionsRequest(c.Server, uuid, revisionId)
 	if err != nil {
 		return nil, err
@@ -909,7 +909,7 @@ func (c *Client) DeleteProgramCodeRevisions(ctx context.Context, uuid UuidParam,
 	return c.Client.Do(req)
 }
 
-func (c *Client) SignProgramCodeRevisions(ctx context.Context, uuid UuidParam, revisionId int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) SignProgramCodeRevisions(ctx context.Context, uuid UuidParam, revisionId RevisionIdParam, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSignProgramCodeRevisionsRequest(c.Server, uuid, revisionId)
 	if err != nil {
 		return nil, err
@@ -1353,7 +1353,7 @@ func (c *Client) AddNewTokenToUser(ctx context.Context, uuid UuidParam, body Add
 	return c.Client.Do(req)
 }
 
-func (c *Client) DeleteTokenForUser(ctx context.Context, uuid UuidParam, tokenUuid string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) DeleteTokenForUser(ctx context.Context, uuid UuidParam, tokenUuid TokenUUIDParam, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteTokenForUserRequest(c.Server, uuid, tokenUuid)
 	if err != nil {
 		return nil, err
@@ -1636,7 +1636,7 @@ func NewDeleteAlertByUuidRequest(server string, uuid UuidParam) (*http.Request, 
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -1670,7 +1670,7 @@ func NewFindAlertByUuidRequest(server string, uuid UuidParam) (*http.Request, er
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -1715,7 +1715,7 @@ func NewUpdateAlertByUuidRequestWithBody(server string, uuid UuidParam, contentT
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -1872,7 +1872,7 @@ func NewDeleteDatasetByUuidRequest(server string, uuid UuidParam) (*http.Request
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -1906,7 +1906,7 @@ func NewFindDatasetByUuidRequest(server string, uuid UuidParam) (*http.Request, 
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -1951,7 +1951,7 @@ func NewUpdateDatasetByUuidRequestWithBody(server string, uuid UuidParam, conten
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -1987,7 +1987,7 @@ func NewAssembleDatasetPartsByKeyRequest(server string, uuid UuidParam, params *
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2032,14 +2032,16 @@ func NewAssembleDatasetPartsByKeyRequest(server string, uuid UuidParam, params *
 
 	if params != nil {
 
-		var headerParam0 string
+		if params.ContentMD5 != nil {
+			var headerParam0 string
 
-		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Content-MD5", params.ContentMD5, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
-		if err != nil {
-			return nil, err
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Content-MD5", *params.ContentMD5, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Content-MD5", headerParam0)
 		}
-
-		req.Header.Set("Content-MD5", headerParam0)
 
 	}
 
@@ -2052,7 +2054,7 @@ func NewListDatasetPartsByKeyRequest(server string, uuid UuidParam, params *List
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2104,7 +2106,7 @@ func NewUploadDatasetContentByKeyRequest(server string, uuid UuidParam, params *
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2161,14 +2163,16 @@ func NewUploadDatasetContentByKeyRequest(server string, uuid UuidParam, params *
 
 	if params != nil {
 
-		var headerParam0 string
+		if params.ContentMD5 != nil {
+			var headerParam0 string
 
-		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Content-MD5", params.ContentMD5, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
-		if err != nil {
-			return nil, err
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Content-MD5", *params.ContentMD5, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Content-MD5", headerParam0)
 		}
-
-		req.Header.Set("Content-MD5", headerParam0)
 
 	}
 
@@ -2181,7 +2185,7 @@ func NewGetRawDatasetByUuidRequest(server string, uuid UuidParam, params *GetRaw
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2230,7 +2234,7 @@ func NewDeleteDatasetUploadByKeyRequest(server string, uuid UuidParam, params *D
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2282,7 +2286,7 @@ func NewInitializeDatasetUploadByUuidRequest(server string, uuid UuidParam) (*ht
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2421,7 +2425,7 @@ func NewDeleteGroupByUuidRequest(server string, uuid UuidParam) (*http.Request, 
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2455,7 +2459,7 @@ func NewFindGroupByUuidRequest(server string, uuid UuidParam) (*http.Request, er
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2500,7 +2504,7 @@ func NewUpdateGroupByUuidRequestWithBody(server string, uuid UuidParam, contentT
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2536,7 +2540,7 @@ func NewFindPoliciesForGroupRequest(server string, uuid UuidParam) (*http.Reques
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2748,7 +2752,7 @@ func NewDeletePolicyByUuidRequest(server string, uuid UuidParam) (*http.Request,
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2782,7 +2786,7 @@ func NewFindPolicyByUuidRequest(server string, uuid UuidParam) (*http.Request, e
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2827,7 +2831,7 @@ func NewUpdatePolicyByUuidRequestWithBody(server string, uuid UuidParam, content
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2984,7 +2988,7 @@ func NewDeleteProgramByUuidRequest(server string, uuid UuidParam) (*http.Request
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3018,7 +3022,7 @@ func NewFindProgramByUuidRequest(server string, uuid UuidParam) (*http.Request, 
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3063,7 +3067,7 @@ func NewUpdateProgramByUuidRequestWithBody(server string, uuid UuidParam, conten
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3099,7 +3103,7 @@ func NewGetCodeFromProgramRequest(server string, uuid UuidParam) (*http.Request,
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3133,7 +3137,7 @@ func NewAddProgramCodeRevisionRequestWithBody(server string, uuid UuidParam, con
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3169,7 +3173,7 @@ func NewGetProgramCodeRevisionsDiffRequest(server string, uuid UuidParam, params
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3233,7 +3237,7 @@ func NewGetProgramCodeRevisionsRequest(server string, uuid UuidParam) (*http.Req
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3262,12 +3266,12 @@ func NewGetProgramCodeRevisionsRequest(server string, uuid UuidParam) (*http.Req
 }
 
 // NewDeleteProgramCodeRevisionsRequest generates requests for DeleteProgramCodeRevisions
-func NewDeleteProgramCodeRevisionsRequest(server string, uuid UuidParam, revisionId int) (*http.Request, error) {
+func NewDeleteProgramCodeRevisionsRequest(server string, uuid UuidParam, revisionId RevisionIdParam) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3303,12 +3307,12 @@ func NewDeleteProgramCodeRevisionsRequest(server string, uuid UuidParam, revisio
 }
 
 // NewSignProgramCodeRevisionsRequest generates requests for SignProgramCodeRevisions
-func NewSignProgramCodeRevisionsRequest(server string, uuid UuidParam, revisionId int) (*http.Request, error) {
+func NewSignProgramCodeRevisionsRequest(server string, uuid UuidParam, revisionId RevisionIdParam) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3349,7 +3353,7 @@ func NewExecuteProgramWebhookRequest(server string, uuid UuidParam) (*http.Reque
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3504,7 +3508,7 @@ func NewDeleteThingByUuidRequest(server string, uuid UuidParam) (*http.Request, 
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3538,7 +3542,7 @@ func NewFindThingByUuidRequest(server string, uuid UuidParam) (*http.Request, er
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3583,7 +3587,7 @@ func NewUpdateThingByUuidRequestWithBody(server string, uuid UuidParam, contentT
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3619,7 +3623,7 @@ func NewFindDatasetsForThingRequest(server string, uuid UuidParam) (*http.Reques
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3653,7 +3657,7 @@ func NewFindTimeSeriesForThingRequest(server string, uuid UuidParam) (*http.Requ
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3808,7 +3812,7 @@ func NewDeleteTimeSeriesByUuidRequest(server string, uuid UuidParam) (*http.Requ
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3842,7 +3846,7 @@ func NewFindTimeSeriesByUuidRequest(server string, uuid UuidParam) (*http.Reques
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3887,7 +3891,7 @@ func NewUpdateTimeseriesByUuidRequestWithBody(server string, uuid UuidParam, con
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -3923,7 +3927,7 @@ func NewDeleteDataFromTimeSeriesRequest(server string, uuid UuidParam, params *D
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -4019,7 +4023,7 @@ func NewQueryTimeseriesForDataRequest(server string, uuid UuidParam, params *Que
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -4190,7 +4194,7 @@ func NewAddDataToTimeseriesRequestWithBody(server string, uuid UuidParam, params
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -4533,7 +4537,7 @@ func NewDeleteUserByUuidRequest(server string, uuid UuidParam) (*http.Request, e
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -4567,7 +4571,7 @@ func NewFindUserByUuidRequest(server string, uuid UuidParam) (*http.Request, err
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -4612,7 +4616,7 @@ func NewUpdateUserByUuidRequestWithBody(server string, uuid UuidParam, contentTy
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -4648,7 +4652,7 @@ func NewFindPoliciesForUserRequest(server string, uuid UuidParam) (*http.Request
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -4693,7 +4697,7 @@ func NewSetRequestRateForUserRequestWithBody(server string, uuid UuidParam, cont
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -4729,7 +4733,7 @@ func NewFindTokensForUserRequest(server string, uuid UuidParam) (*http.Request, 
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -4774,7 +4778,7 @@ func NewAddNewTokenToUserRequestWithBody(server string, uuid UuidParam, contentT
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -4805,19 +4809,19 @@ func NewAddNewTokenToUserRequestWithBody(server string, uuid UuidParam, contentT
 }
 
 // NewDeleteTokenForUserRequest generates requests for DeleteTokenForUser
-func NewDeleteTokenForUserRequest(server string, uuid UuidParam, tokenUuid string) (*http.Request, error) {
+func NewDeleteTokenForUserRequest(server string, uuid UuidParam, tokenUuid TokenUUIDParam) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "uuid", uuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
 
 	var pathParam1 string
 
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "token_uuid", tokenUuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "token_uuid", tokenUuid, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -5020,10 +5024,10 @@ type ClientWithResponsesInterface interface {
 	GetProgramCodeRevisionsWithResponse(ctx context.Context, uuid UuidParam, reqEditors ...RequestEditorFn) (*GetProgramCodeRevisionsResponse, error)
 
 	// DeleteProgramCodeRevisionsWithResponse request
-	DeleteProgramCodeRevisionsWithResponse(ctx context.Context, uuid UuidParam, revisionId int, reqEditors ...RequestEditorFn) (*DeleteProgramCodeRevisionsResponse, error)
+	DeleteProgramCodeRevisionsWithResponse(ctx context.Context, uuid UuidParam, revisionId RevisionIdParam, reqEditors ...RequestEditorFn) (*DeleteProgramCodeRevisionsResponse, error)
 
 	// SignProgramCodeRevisionsWithResponse request
-	SignProgramCodeRevisionsWithResponse(ctx context.Context, uuid UuidParam, revisionId int, reqEditors ...RequestEditorFn) (*SignProgramCodeRevisionsResponse, error)
+	SignProgramCodeRevisionsWithResponse(ctx context.Context, uuid UuidParam, revisionId RevisionIdParam, reqEditors ...RequestEditorFn) (*SignProgramCodeRevisionsResponse, error)
 
 	// ExecuteProgramWebhookWithResponse request
 	ExecuteProgramWebhookWithResponse(ctx context.Context, uuid UuidParam, reqEditors ...RequestEditorFn) (*ExecuteProgramWebhookResponse, error)
@@ -5125,7 +5129,7 @@ type ClientWithResponsesInterface interface {
 	AddNewTokenToUserWithResponse(ctx context.Context, uuid UuidParam, body AddNewTokenToUserJSONRequestBody, reqEditors ...RequestEditorFn) (*AddNewTokenToUserResponse, error)
 
 	// DeleteTokenForUserWithResponse request
-	DeleteTokenForUserWithResponse(ctx context.Context, uuid UuidParam, tokenUuid string, reqEditors ...RequestEditorFn) (*DeleteTokenForUserResponse, error)
+	DeleteTokenForUserWithResponse(ctx context.Context, uuid UuidParam, tokenUuid TokenUUIDParam, reqEditors ...RequestEditorFn) (*DeleteTokenForUserResponse, error)
 }
 
 type FindAlertsResponse struct {
@@ -5348,7 +5352,7 @@ type AssembleDatasetPartsByKeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON400      *struct {
-		Message string `json:"message"`
+		Message interface{} `json:"message"`
 	}
 }
 
@@ -5460,9 +5464,7 @@ func (r DeleteDatasetUploadByKeyResponse) StatusCode() int {
 type InitializeDatasetUploadByUuidResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *struct {
-		UploadId string `json:"uploadId"`
-	}
+	JSON200      *UploadSession
 }
 
 // Status returns HTTPResponse.Status
@@ -6108,7 +6110,7 @@ func (r UpdateThingByUuidResponse) StatusCode() int {
 type FindDatasetsForThingResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]Timeseries
+	JSON200      *DatasetList
 }
 
 // Status returns HTTPResponse.Status
@@ -6281,7 +6283,7 @@ func (r DeleteDataFromTimeSeriesResponse) StatusCode() int {
 type QueryTimeseriesForDataResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]TsRow
+	JSON200      *TsRowList
 }
 
 // Status returns HTTPResponse.Status
@@ -6324,7 +6326,7 @@ func (r AddDataToTimeseriesResponse) StatusCode() int {
 type FindTsdataByQueryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]TsResults
+	JSON200      *TsResultsList
 }
 
 // Status returns HTTPResponse.Status
@@ -6995,7 +6997,7 @@ func (c *ClientWithResponses) GetProgramCodeRevisionsWithResponse(ctx context.Co
 }
 
 // DeleteProgramCodeRevisionsWithResponse request returning *DeleteProgramCodeRevisionsResponse
-func (c *ClientWithResponses) DeleteProgramCodeRevisionsWithResponse(ctx context.Context, uuid UuidParam, revisionId int, reqEditors ...RequestEditorFn) (*DeleteProgramCodeRevisionsResponse, error) {
+func (c *ClientWithResponses) DeleteProgramCodeRevisionsWithResponse(ctx context.Context, uuid UuidParam, revisionId RevisionIdParam, reqEditors ...RequestEditorFn) (*DeleteProgramCodeRevisionsResponse, error) {
 	rsp, err := c.DeleteProgramCodeRevisions(ctx, uuid, revisionId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -7004,7 +7006,7 @@ func (c *ClientWithResponses) DeleteProgramCodeRevisionsWithResponse(ctx context
 }
 
 // SignProgramCodeRevisionsWithResponse request returning *SignProgramCodeRevisionsResponse
-func (c *ClientWithResponses) SignProgramCodeRevisionsWithResponse(ctx context.Context, uuid UuidParam, revisionId int, reqEditors ...RequestEditorFn) (*SignProgramCodeRevisionsResponse, error) {
+func (c *ClientWithResponses) SignProgramCodeRevisionsWithResponse(ctx context.Context, uuid UuidParam, revisionId RevisionIdParam, reqEditors ...RequestEditorFn) (*SignProgramCodeRevisionsResponse, error) {
 	rsp, err := c.SignProgramCodeRevisions(ctx, uuid, revisionId, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -7328,7 +7330,7 @@ func (c *ClientWithResponses) AddNewTokenToUserWithResponse(ctx context.Context,
 }
 
 // DeleteTokenForUserWithResponse request returning *DeleteTokenForUserResponse
-func (c *ClientWithResponses) DeleteTokenForUserWithResponse(ctx context.Context, uuid UuidParam, tokenUuid string, reqEditors ...RequestEditorFn) (*DeleteTokenForUserResponse, error) {
+func (c *ClientWithResponses) DeleteTokenForUserWithResponse(ctx context.Context, uuid UuidParam, tokenUuid TokenUUIDParam, reqEditors ...RequestEditorFn) (*DeleteTokenForUserResponse, error) {
 	rsp, err := c.DeleteTokenForUser(ctx, uuid, tokenUuid, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -7572,7 +7574,7 @@ func ParseAssembleDatasetPartsByKeyResponse(rsp *http.Response) (*AssembleDatase
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest struct {
-			Message string `json:"message"`
+			Message interface{} `json:"message"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -7710,9 +7712,7 @@ func ParseInitializeDatasetUploadByUuidResponse(rsp *http.Response) (*Initialize
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			UploadId string `json:"uploadId"`
-		}
+		var dest UploadSession
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -8352,7 +8352,7 @@ func ParseFindDatasetsForThingResponse(rsp *http.Response) (*FindDatasetsForThin
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []Timeseries
+		var dest DatasetList
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -8530,7 +8530,7 @@ func ParseQueryTimeseriesForDataResponse(rsp *http.Response) (*QueryTimeseriesFo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []TsRow
+		var dest TsRowList
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -8572,7 +8572,7 @@ func ParseFindTsdataByQueryResponse(rsp *http.Response) (*FindTsdataByQueryRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []TsResults
+		var dest TsResultsList
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

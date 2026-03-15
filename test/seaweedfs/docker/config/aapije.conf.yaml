@@ -31,3 +31,8 @@ dataset_storage:
 dataset_uploads:
   max_part_size: 16777216
   max_total_size: 134217728
+
+rate_control:
+  req_per_hour: 10000000
+  maxburst: 100000
+  cleanup: "20minutes"

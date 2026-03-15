@@ -141,7 +141,9 @@ func (svc *TimeseriesService) AddTimeseries(ctx context.Context, opt *NewTimeser
 		return nil, err
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 
 	var lb *float64
 	var ub *float64
@@ -1464,7 +1466,9 @@ func (svc *TimeseriesService) UpdateTimeseries(ctx context.Context, p UpdateTime
 		count += c
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 
 	return count, nil
 }

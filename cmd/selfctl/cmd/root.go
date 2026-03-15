@@ -22,12 +22,16 @@ import (
 	"github.com/spf13/cobra"
 	// "os"
 	"path"
+	"strings"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
 )
 
 var cfgFile string
+var apiServer string
+var apiDomain string
+var apiToken string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -49,6 +53,9 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.selfctl/config.yaml)")
+	rootCmd.PersistentFlags().StringVar(&apiServer, "server", "", "API base URL")
+	rootCmd.PersistentFlags().StringVar(&apiDomain, "domain", "", "API domain / BasicAuth username")
+	rootCmd.PersistentFlags().StringVar(&apiToken, "token", "", "API token / BasicAuth password")
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -69,6 +76,8 @@ func initConfig() {
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match
+	viper.SetEnvPrefix("selfctl")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	viper.ReadInConfig()
 }

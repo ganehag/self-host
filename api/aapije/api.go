@@ -10,10 +10,12 @@ package aapije
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/self-host/self-host/api/aapije/rest"
 	"github.com/self-host/self-host/internal/services"
 )
 
@@ -25,6 +27,8 @@ type Error struct {
 
 // RestApi is the main REST API structure
 type RestApi struct{}
+
+const defaultJSONBodyLimit = 1 << 20
 
 // NewRestApi creates a new instance of the REST API
 func NewRestApi() *RestApi {
@@ -56,4 +60,38 @@ func (ra *RestApi) GetDomainToken(r *http.Request) (*services.DomainToken, error
 	}
 
 	return domaintoken, nil
+}
+
+func (ra *RestApi) decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
+	return ra.decodeJSONBodyWithLimit(w, r, dst, defaultJSONBodyLimit)
+}
+
+func (ra *RestApi) decodeJSONBodyWithLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) error {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	return json.NewDecoder(r.Body).Decode(dst)
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func uuidFromParam(id rest.UuidParam) uuid.UUID {
+	return uuid.UUID(id)
+}
+
+func uuidSliceFromParams(ids []rest.UUID) []uuid.UUID {
+	out := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		out[i] = uuid.UUID(id)
+	}
+	return out
+}
+
+func nullableStringParam[T ~string](v *T) string {
+	if v == nil {
+		return ""
+	}
+	return string(*v)
 }

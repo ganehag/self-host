@@ -234,6 +234,15 @@ SET
 		WHEN sqlc.arg(set_content)::boolean THEN NULLIF(sqlc.arg(storage_key)::text, '')
 		ELSE storage_key
 	END,
+	updated = CASE
+		WHEN sqlc.arg(set_name)::boolean
+			OR sqlc.arg(set_format)::boolean
+			OR sqlc.arg(set_content)::boolean
+			OR sqlc.arg(set_thing_uuid)::boolean
+			OR sqlc.arg(set_tags)::boolean
+		THEN NOW()
+		ELSE updated
+	END,
 	belongs_to = CASE
 		WHEN sqlc.arg(set_thing_uuid)::boolean THEN sqlc.arg(thing_uuid)
 		ELSE belongs_to

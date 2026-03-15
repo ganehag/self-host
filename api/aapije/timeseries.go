@@ -6,7 +6,6 @@ package aapije
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -22,7 +21,7 @@ import (
 func (ra *RestApi) AddTimeSeries(w http.ResponseWriter, r *http.Request) {
 	// We expect a NewUser object in the request body.
 	var n rest.NewTimeseries
-	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
+	if err := ra.decodeJSONBody(w, r, &n); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -75,17 +74,12 @@ func (ra *RestApi) AddTimeSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(thing)
+	writeJSON(w, http.StatusCreated, thing)
 }
 
 // AddDataToTimeseries adds data to a specific time series
 func (ra *RestApi) AddDataToTimeseries(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.AddDataToTimeseriesParams) {
-	tsUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	tsUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -102,11 +96,8 @@ func (ra *RestApi) AddDataToTimeseries(w http.ResponseWriter, r *http.Request, i
 	svc := services.NewTimeseriesService(db)
 
 	// Allow max of 5 MB read from body
-	r.Body = http.MaxBytesReader(w, r.Body, 5242880)
-
-	// We expect a NewTsData object in the request body.
 	var obj rest.NewTsData
-	if err := json.NewDecoder(r.Body).Decode(&obj); err != nil {
+	if err := ra.decodeJSONBodyWithLimit(w, r, &obj, 5242880); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -144,11 +135,7 @@ func (ra *RestApi) AddDataToTimeseries(w http.ResponseWriter, r *http.Request, i
 
 // QueryTimeseriesForData returns data from a specific time series
 func (ra *RestApi) QueryTimeseriesForData(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.QueryTimeseriesForDataParams) {
-	tsUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	tsUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -194,8 +181,7 @@ func (ra *RestApi) QueryTimeseriesForData(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(data)
+	writeJSON(w, http.StatusOK, data)
 }
 
 // FindTimeSeries lists all time series
@@ -250,17 +236,12 @@ func (ra *RestApi) FindTimeSeries(w http.ResponseWriter, r *http.Request, p rest
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(timeseries)
+	writeJSON(w, http.StatusOK, timeseries)
 }
 
 // FindTimeSeriesByUuid returns a specific time series by its UUID
 func (ra *RestApi) FindTimeSeriesByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	tsUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	tsUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -275,17 +256,12 @@ func (ra *RestApi) FindTimeSeriesByUuid(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(timeseries)
+	writeJSON(w, http.StatusOK, timeseries)
 }
 
 // UpdateTimeseriesByUuid updates a specific time series by its UUID
 func (ra *RestApi) UpdateTimeseriesByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	tsUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	tsUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -297,7 +273,7 @@ func (ra *RestApi) UpdateTimeseriesByUuid(w http.ResponseWriter, r *http.Request
 
 	// We expect a UpdateTimeseries object in the request body.
 	var obj rest.UpdateTimeseries
-	if err := json.NewDecoder(r.Body).Decode(&obj); err != nil {
+	if err := ra.decodeJSONBody(w, r, &obj); err != nil {
 		ie.SendHTTPError(w, ie.ErrorMalformedRequest)
 		return
 	}
@@ -352,11 +328,7 @@ func (ra *RestApi) UpdateTimeseriesByUuid(w http.ResponseWriter, r *http.Request
 
 // DeleteTimeSeriesByUuid deletes a specific time series by its UUID
 func (ra *RestApi) DeleteTimeSeriesByUuid(w http.ResponseWriter, r *http.Request, id rest.UuidParam) {
-	tsUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	tsUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
@@ -380,11 +352,7 @@ func (ra *RestApi) DeleteTimeSeriesByUuid(w http.ResponseWriter, r *http.Request
 
 // DeleteDataFromTimeSeries deletes data from a time series
 func (ra *RestApi) DeleteDataFromTimeSeries(w http.ResponseWriter, r *http.Request, id rest.UuidParam, p rest.DeleteDataFromTimeSeriesParams) {
-	tsUUID, err := uuid.Parse(string(id))
-	if err != nil {
-		ie.SendHTTPError(w, ie.ErrorInvalidUUID)
-		return
-	}
+	tsUUID := uuidFromParam(id)
 
 	db, err := ra.GetDB(r)
 	if err != nil {
