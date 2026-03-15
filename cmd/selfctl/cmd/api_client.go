@@ -36,6 +36,9 @@ type apiConnectionOptions struct {
 func resolveAPIConnection(serverFlag, domainFlag, tokenFlag string) (apiConnectionOptions, error) {
 	server := strings.TrimSpace(serverFlag)
 	if server == "" {
+		server = strings.TrimSpace(apiServer)
+	}
+	if server == "" {
 		server = strings.TrimSpace(viper.GetString("api.server"))
 	}
 	if server == "" {
@@ -44,6 +47,9 @@ func resolveAPIConnection(serverFlag, domainFlag, tokenFlag string) (apiConnecti
 
 	domain := strings.TrimSpace(domainFlag)
 	if domain == "" {
+		domain = strings.TrimSpace(apiDomain)
+	}
+	if domain == "" {
 		domain = strings.TrimSpace(viper.GetString("api.domain"))
 	}
 	if domain == "" {
@@ -51,6 +57,9 @@ func resolveAPIConnection(serverFlag, domainFlag, tokenFlag string) (apiConnecti
 	}
 
 	token := strings.TrimSpace(tokenFlag)
+	if token == "" {
+		token = strings.TrimSpace(apiToken)
+	}
 	if token == "" {
 		token = strings.TrimSpace(viper.GetString("api.token"))
 	}

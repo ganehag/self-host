@@ -80,9 +80,6 @@ var datasetUploadCmd = &cobra.Command{
 
 func init() {
 	datasetCmd.AddCommand(datasetUploadCmd)
-	datasetUploadCmd.Flags().StringVar(&datasetUploadServer, "server", "", "API base URL")
-	datasetUploadCmd.Flags().StringVar(&datasetUploadDomain, "domain", "", "API domain / BasicAuth username")
-	datasetUploadCmd.Flags().StringVar(&datasetUploadToken, "token", "", "API token / BasicAuth password")
 	datasetUploadCmd.Flags().StringVar(&datasetUploadName, "name", "", "Dataset name when creating a new dataset")
 	datasetUploadCmd.Flags().StringVar(&datasetUploadFormat, "format", "", "Dataset format, defaults to the file extension or 'bin'")
 	datasetUploadCmd.Flags().StringVar(&datasetUploadDatasetID, "dataset", "", "Existing dataset UUID to replace")

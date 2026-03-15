@@ -20,6 +20,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -30,6 +31,8 @@ import (
 const (
 	outputFormatTable = "table"
 	outputFormatJSON  = "json"
+	sizeFormatHuman   = "human"
+	sizeFormatBytes   = "bytes"
 )
 
 func validateDatasetOutputFormat(format string) error {
@@ -41,7 +44,16 @@ func validateDatasetOutputFormat(format string) error {
 	}
 }
 
-func printDatasetList(datasets []rest.Dataset, format string) error {
+func validateDatasetSizeFormat(format string) error {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case sizeFormatHuman, sizeFormatBytes:
+		return nil
+	default:
+		return fmt.Errorf("unsupported size format %q; supported values: human, bytes", format)
+	}
+}
+
+func printDatasetList(datasets []rest.Dataset, format string, sizeFormat string) error {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case outputFormatJSON:
 		enc := json.NewEncoder(os.Stdout)
@@ -51,11 +63,11 @@ func printDatasetList(datasets []rest.Dataset, format string) error {
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "UUID\tNAME\tFORMAT\tSIZE\tUPDATED")
 		for _, ds := range datasets {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n",
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 				ds.Uuid,
 				ds.Name,
 				ds.Format,
-				ds.Size,
+				formatDatasetSize(ds.Size, sizeFormat),
 				ds.Updated.Format("2006-01-02 15:04:05"),
 			)
 		}
@@ -63,7 +75,7 @@ func printDatasetList(datasets []rest.Dataset, format string) error {
 	}
 }
 
-func printDataset(ds *rest.Dataset, format string) error {
+func printDataset(ds *rest.Dataset, format string, sizeFormat string) error {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case outputFormatJSON:
 		enc := json.NewEncoder(os.Stdout)
@@ -74,7 +86,7 @@ func printDataset(ds *rest.Dataset, format string) error {
 		fmt.Fprintf(w, "UUID:\t%s\n", ds.Uuid)
 		fmt.Fprintf(w, "Name:\t%s\n", ds.Name)
 		fmt.Fprintf(w, "Format:\t%s\n", ds.Format)
-		fmt.Fprintf(w, "Size:\t%d\n", ds.Size)
+		fmt.Fprintf(w, "Size:\t%s\n", formatDatasetSize(ds.Size, sizeFormat))
 		fmt.Fprintf(w, "Checksum:\t%s\n", ds.Checksum)
 		fmt.Fprintf(w, "Created:\t%s\n", ds.Created.Format("2006-01-02 15:04:05 -0700"))
 		fmt.Fprintf(w, "Updated:\t%s\n", ds.Updated.Format("2006-01-02 15:04:05 -0700"))
@@ -90,4 +102,34 @@ func printDataset(ds *rest.Dataset, format string) error {
 		}
 		return w.Flush()
 	}
+}
+
+func formatDatasetSize(size int64, sizeFormat string) string {
+	if strings.EqualFold(strings.TrimSpace(sizeFormat), sizeFormatBytes) {
+		return fmt.Sprintf("%d", size)
+	}
+	return humanBytes(size)
+}
+
+func humanBytes(size int64) string {
+	if size < 1024 {
+		return fmt.Sprintf("%d B", size)
+	}
+
+	units := []string{"kB", "MB", "GB", "TB", "PB"}
+	value := float64(size)
+	unit := "B"
+	for _, candidate := range units {
+		value /= 1024
+		unit = candidate
+		if value < 1024 {
+			break
+		}
+	}
+
+	if value >= 10 || math.Mod(value, 1) == 0 {
+		return fmt.Sprintf("%.0f %s", value, unit)
+	}
+
+	return fmt.Sprintf("%.1f %s", value, unit)
 }

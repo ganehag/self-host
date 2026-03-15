@@ -45,6 +45,7 @@ var (
 	datasetListLimit  int64
 	datasetListOffset int64
 	datasetListFormat string
+	datasetListSize   string
 )
 
 var datasetListCmd = &cobra.Command{
@@ -62,16 +63,17 @@ var datasetListCmd = &cobra.Command{
 
 func init() {
 	datasetCmd.AddCommand(datasetListCmd)
-	datasetListCmd.Flags().StringVar(&datasetListServer, "server", "", "API base URL")
-	datasetListCmd.Flags().StringVar(&datasetListDomain, "domain", "", "API domain / BasicAuth username")
-	datasetListCmd.Flags().StringVar(&datasetListToken, "token", "", "API token / BasicAuth password")
 	datasetListCmd.Flags().Int64Var(&datasetListLimit, "limit", 20, "Maximum number of datasets to list")
 	datasetListCmd.Flags().Int64Var(&datasetListOffset, "offset", 0, "Offset into the dataset list")
 	datasetListCmd.Flags().StringVar(&datasetListFormat, "format", outputFormatTable, "Output format: table or json")
+	datasetListCmd.Flags().StringVar(&datasetListSize, "size-format", sizeFormatHuman, "Size format for table output: human or bytes")
 }
 
 func runDatasetList() error {
 	if err := validateDatasetOutputFormat(datasetListFormat); err != nil {
+		return err
+	}
+	if err := validateDatasetSizeFormat(datasetListSize); err != nil {
 		return err
 	}
 
@@ -103,5 +105,5 @@ func runDatasetList() error {
 		return fmt.Errorf("list datasets failed: %s", responseError(resp.StatusCode(), resp.Body))
 	}
 
-	return printDatasetList(*resp.JSON200, datasetListFormat)
+	return printDatasetList(*resp.JSON200, datasetListFormat, datasetListSize)
 }

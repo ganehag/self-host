@@ -65,9 +65,6 @@ var datasetDownloadCmd = &cobra.Command{
 
 func init() {
 	datasetCmd.AddCommand(datasetDownloadCmd)
-	datasetDownloadCmd.Flags().StringVar(&datasetDownloadServer, "server", "", "API base URL")
-	datasetDownloadCmd.Flags().StringVar(&datasetDownloadDomain, "domain", "", "API domain / BasicAuth username")
-	datasetDownloadCmd.Flags().StringVar(&datasetDownloadToken, "token", "", "API token / BasicAuth password")
 	datasetDownloadCmd.Flags().StringVarP(&datasetDownloadOutput, "output", "o", "", "Write dataset content to this file instead of stdout")
 }
 

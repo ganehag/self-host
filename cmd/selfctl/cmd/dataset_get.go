@@ -44,6 +44,7 @@ var (
 	datasetGetDomain string
 	datasetGetToken  string
 	datasetGetFormat string
+	datasetGetSize   string
 )
 
 var datasetGetCmd = &cobra.Command{
@@ -62,14 +63,15 @@ var datasetGetCmd = &cobra.Command{
 
 func init() {
 	datasetCmd.AddCommand(datasetGetCmd)
-	datasetGetCmd.Flags().StringVar(&datasetGetServer, "server", "", "API base URL")
-	datasetGetCmd.Flags().StringVar(&datasetGetDomain, "domain", "", "API domain / BasicAuth username")
-	datasetGetCmd.Flags().StringVar(&datasetGetToken, "token", "", "API token / BasicAuth password")
 	datasetGetCmd.Flags().StringVar(&datasetGetFormat, "format", outputFormatTable, "Output format: table or json")
+	datasetGetCmd.Flags().StringVar(&datasetGetSize, "size-format", sizeFormatHuman, "Size format for table output: human or bytes")
 }
 
 func runDatasetGet(id string) error {
 	if err := validateDatasetOutputFormat(datasetGetFormat); err != nil {
+		return err
+	}
+	if err := validateDatasetSizeFormat(datasetGetSize); err != nil {
 		return err
 	}
 
@@ -96,5 +98,5 @@ func runDatasetGet(id string) error {
 		return fmt.Errorf("get dataset failed: %s", responseError(resp.StatusCode(), resp.Body))
 	}
 
-	return printDataset(resp.JSON200, datasetGetFormat)
+	return printDataset(resp.JSON200, datasetGetFormat, datasetGetSize)
 }
